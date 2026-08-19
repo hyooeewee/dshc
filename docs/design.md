@@ -16,7 +16,7 @@
 
 ## 启动命令（已核实）
 
-DSH CLI 规范形为 **`dsh --profile web`**；`dsh web` 是其硬编码等价别名（`@deepseek-ai/dsh/lib/bin.js`）。容器入口用 `dsh --profile web --patch /app/overlay/webstartup.yml`（`--patch` 为构成覆盖层）。另有 `--dump-config`（排障）、`--trusted-host`（远端 /api trust fence）。
+DSH CLI 规范形为 **`dsh --profile web`**；`dsh web` 是其硬编码等价别名（`@deepseek-ai/dsh/lib/bin.js`）。**容器入口用 `node --expose-internals .../dsh/lib/bin.js --profile web --patch /app/overlay/webstartup.yml`** —— DSH 的 cordis-loader/HMR 需要 `--expose-internals`（NODE_OPTIONS 禁止该 flag，只能作为 execArgv；缺失时 HMR loader entry 报错）。另有 `--dump-config`（排障）、`--trusted-host`（远端 /api trust fence）。
 
 ## 镜像内布局
 

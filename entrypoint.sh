@@ -59,5 +59,7 @@ OVERLAY=/app/overlay/webstartup.yml
 [ -f "$OVERLAY" ] || { echo "[dshc] ERROR: overlay missing" >&2; exit 1; }
 echo "[dshc] applying overlay: bind 0.0.0.0:3080 via --patch $OVERLAY"
 
-echo "[dshc] starting: dsh --profile web --patch $OVERLAY"
-exec dsh --profile web --patch "$OVERLAY" "$@"
+# DSH needs node --expose-internals (cordis-plugin-hmr/loader read the internal
+# loader; NODE_OPTIONS forbids the flag, so it must be passed as execArgv).
+echo "[dshc] starting: node --expose-internals dsh bin.js --profile web --patch $OVERLAY"
+exec node --expose-internals /app/template-profile/node_modules/@deepseek-ai/dsh/lib/bin.js --profile web --patch "$OVERLAY" "$@"

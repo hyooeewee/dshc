@@ -57,10 +57,11 @@ docker compose exec dshc dsh plugin --profile web add <package>
 
 ## headless 一次性模式（CI 友好）
 
-镜像 entrypoint 默认引导 **web** profile（并带 0.0.0.0 覆盖层），所以跑 headless 需**覆写 entrypoint** 为 `dsh` 才能进入 headless 引导：
+镜像 entrypoint 默认引导 **web** profile（并带 0.0.0.0 覆盖层），所以跑 headless 需**覆写 entrypoint** 才能进入 headless 引导。DSH 要求 `node --expose-internals`（cordis loader/HMR 使用；NODE_OPTIONS 禁止该 flag，只能作为 execArgv），所以直接调 bin.js：
 
 ```bash
-docker compose run --rm --entrypoint dsh dshc --profile headless "你的任务"
+docker compose run --rm --entrypoint "node --expose-internals" dshc \
+  /app/template-profile/node_modules/@deepseek-ai/dsh/lib/bin.js --profile headless "你的任务"
 ```
 
 无监听端口、跑完退出——方便脚本化/CI。
