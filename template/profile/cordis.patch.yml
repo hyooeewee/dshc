@@ -1,0 +1,6 @@
+# dshc container — web-profile user layer (empty).
+# Bundle layers are composed from node_modules via package.json's
+# `dsh.profile.bundles`; the container binds 0.0.0.0 through the
+# `--patch /app/overlay/webstartup.yml` overlay at boot, NOT by editing this
+# file, so this stays a clean, minimal, reproducible user layer.
+[]

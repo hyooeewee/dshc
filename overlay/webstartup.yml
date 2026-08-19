@@ -1,0 +1,13 @@
+# dshc container overlay — bind 0.0.0.0 inside the container so `docker -p`
+# (host-side, default 127.0.0.1:3080) forwarding reaches the GUI.
+#
+# DSH's own `--host 0.0.0.0` is intentionally rejected for safety
+# (see @deepseek-ai/dsh-web-app/lib/startup.js: "would expose remote code
+# execution to the network"). The approved way to change the bind is a loader
+# patch that overrides the `webserver` row's config directly; that is exactly
+# what this file does. It is applied read-only at boot via
+# `dsh --profile web --patch /app/overlay/webstartup.yml`.
+- id: webserver
+  config:
+    host: 0.0.0.0
+    port: 3080

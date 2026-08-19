@@ -1,0 +1,60 @@
+# dshc — Docker Compose（默认硬化）
+# 用法：export DEEPSEEK_API_KEY=... ; docker compose up -d
+# 浏览器访问 http://127.0.0.1:3080
+services:
+  dshc:
+    image: ghcr.io/hyooeewee/dshc:latest
+    build:
+      context: .
+    container_name: dshc
+    hostname: dshc
+    restart: unless-stopped
+
+    # -- 默认硬化（#8 / #2）-----------
+    read_only: true                 # rootfs 只读，唯一可写点：/data、/workspace、/tmp(tmpfs)
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true      # 禁止提权；Landlock 沙箱基于 no_new_privs 即可用
+    # 默认 seccomp 保留（#2：Landlock 在默认 seccomp 下可用，不需要 seccomp=unconfined/--privileged）
+    cap_drop:
+      - ALL
+    # 补回 Docker 常规默认 cap 集合（尽量贴近“无额外特权”）
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - FSETID
+      - KILL
+      - SETGID
+      - SETUID
+      - SETPCAP
+      - NET_BIND_SERVICE
+      - NET_RAW
+      - SYS_CHROOT
+      - MKNOD
+      - AUDIT_WRITE
+      - SETFCAP
+    pids_limit: 512
+    mem_limit: 4g
+    cpus: 2
+
+    # -- 端口：容器内 0.0.0.0（overlay 放行），宿主侧默认仅映射到 localhost，不暴露局域网 ----
+    ports:
+      - "127.0.0.1:3080:3080"
+
+    # -- 状态与隔离 --------------------
+    volumes:
+      - dshc-data:/data            # 状态卷 = DSH_HOME（配置/凭证/会话/技能/插件）
+    # 默认无宿主工作区挂载 → 容器边界最强隔离。需要处理宿主目录时显式挂载（会穿透边界！），
+    # 示例（只读只挂一个目录）： - ./host-folder:/workspace:ro
+
+    # -- 密钥/环境：DSH 将 DEEPSEEK_* 列为 bootstrap 变量，禁止写 .env；经环境变量注入 ----
+    environment:
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DSH_PERMISSION_MODE: workspace-write
+      DSH_TELEMETRY_DISABLED: "1"
+      # DSH_ALLOW_PLUGIN_INSTALL: "1"   # 可选：允许运行时装插件（node_modules 复制进状态卷）
+
+volumes:
+  dshc-data:

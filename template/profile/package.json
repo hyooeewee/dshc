@@ -1,0 +1,19 @@
+{
+  "name": "dsh-profile-web",
+  "private": true,
+  "dependencies": {
+    "@linxin666/dsh-web-ui-all": "^0.2.1",
+    "dsh-browser": "github:Lum1104/dsh-browser",
+    "dshmarket": "^1.14.0"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dshmarket",
+        "@linxin666/dsh-web-ui-all"
+      ]
+    }
+  }
+}

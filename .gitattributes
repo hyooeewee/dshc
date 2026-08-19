@@ -1,0 +1,7 @@
+# 保证 shell/Docker 文件在 Windows 检出下仍用 LF（容器内 shell 脚本要求 LF）
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+Dockerfile text eol=lf
+*.md text eol=lf
+*.json text eol=lf
