@@ -13,7 +13,7 @@
 ## 加固清单（compose 默认值）
 
 - `read_only: true` — rootfs 只读；唯一可写点 `/data`、`/workspace`、`/tmp`(tmpfs)。
-- 非 root 用户 uid 1000 `dsh` 运行。
+- 非 root 用户 uid 10001 `dsh` 运行。
 - `cap_drop: ALL` + 补回常规默认 cap（不额外提权）。
 - `security_opt: no-new-privileges:true`。
 - 保留默认 seccomp；**不为沙箱放松**（#2：Landlock 在默认 seccomp 下即可用）。

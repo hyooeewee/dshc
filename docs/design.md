@@ -12,7 +12,7 @@
 4. **用户模型**：单用户单实例，无内置认证。
 5. **网络**：出站全开（LLM API / web_search / SSH / cloudflared 按需）；入站仅 3080。容器内绑 0.0.0.0 由入口 `--patch overlay/webstartup.yml` 显式放行（DSH CLI 有意拒绝 `--host 0.0.0.0`）；宿主侧 compose 只映射 `127.0.0.1:3080:3080`。
 6. **持久化**：无状态镜像 + 状态卷 `/data`（=DSH_HOME，含 `profiles/`、`sessions/`、`settings.yaml`、`.credentials.yaml`、`storages/`、`skills/`、`dsh-ssh.json`）；`DSH_AGENTS_HOME=/data/agents` 同卷。首启把模板复制进 `/data/profiles/web`，`node_modules` 默认只读符号链接（镜像=版本），`DSH_ALLOW_PLUGIN_INSTALL=1` 时真复制到状态卷（可装插件、持久化）。
-7. **加固**（默认硬化）：非 root（uid 1000 `dsh`）、`cap_drop: ALL` + 常规默认 cap 集合、`no-new-privileges`、保留默认 seccomp、`read_only: true` + `/tmp` tmpfs + `/data`、`/workspace` 两个可写点、资源限制（pids/mem/cpu）、tini PID1、HEALTHCHECK 探 3080、STOPSIGNAL SIGTERM（DSH 自带 5s 优雅退出）。
+7. **加固**（默认硬化）：非 root（uid 10001 `dsh`）、`cap_drop: ALL` + 常规默认 cap 集合、`no-new-privileges`、保留默认 seccomp、`read_only: true` + `/tmp` tmpfs + `/data`、`/workspace` 两个可写点、资源限制（pids/mem/cpu）、tini PID1、HEALTHCHECK 探 3080、STOPSIGNAL SIGTERM（DSH 自带 5s 优雅退出）。
 
 ## 启动命令（已核实）
 

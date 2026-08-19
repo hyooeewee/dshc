@@ -6,13 +6,17 @@
 # /workspace isolated (#4).
 ARG NODE_VERSION=22
 ARG PNPM_VERSION=11.22.0
-# apt mirror (default upstream keeps the public repo clean; pass
-# --build-arg APT_MIRROR=mirrors.aliyun.com for throttled networks)
+# apt mirror (default upstream keeps the public repo clean; for throttled CN
+# networks pass --build-arg APT_MIRROR=mirrors.aliyun.com)
 ARG APT_MIRROR=deb.debian.org
+# npm registry (default upstream; for slow CN networks pass
+# --build-arg NPM_REGISTRY=https://registry.npmmirror.com)
+ARG NPM_REGISTRY=https://registry.npmjs.org
 
 FROM node:${NODE_VERSION}-bookworm-slim AS builder
 ARG APT_MIRROR=deb.debian.org
-ENV DEBIAN_FRONTEND=noninteractive
+ARG NPM_REGISTRY=https://registry.npmjs.org
+ENV DEBIAN_FRONTEND=noninteractive npm_config_registry=$NPM_REGISTRY
 # build toolchain so native modules (node-pty etc.) compile when a prebuild is
 # unavailable under buildx/QEMU for arm64
 RUN for f in /etc/apt/sources.list /etc/apt/sources.list.d/*; do [ -f "$f" ] && sed -i "s|deb.debian.org|$APT_MIRROR|g" "$f"; done \
@@ -32,11 +36,12 @@ ARG APT_MIRROR=deb.debian.org
 ENV DEBIAN_FRONTEND=noninteractive
 # bash for the DSH bash tool; bwrap as an opt-in sandbox fallback; curl for
 # HEALTHCHECK; tini handles signals/reaping as PID 1; passwd provides useradd
+# (UID 1000 is already `node` in this image, so use 10001 for the dsh user)
 RUN for f in /etc/apt/sources.list /etc/apt/sources.list.d/*; do [ -f "$f" ] && sed -i "s|deb.debian.org|$APT_MIRROR|g" "$f"; done \
  && apt-get update \
  && apt-get install -y --no-install-recommends bash bubblewrap ca-certificates curl tini passwd \
  && rm -rf /var/lib/apt/lists/* \
- && useradd --create-home --uid 1000 dsh
+ && useradd --create-home --uid 10001 dsh
 
 WORKDIR /app
 COPY --from=builder /opt/dsh-tpl ./template-profile
