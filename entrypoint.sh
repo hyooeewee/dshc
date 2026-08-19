@@ -1,43 +1,42 @@
 #!/usr/bin/env bash
-# dshc — 容器入口（tini 为 PID1，本脚本经 exec 变为 PID2 的 DSH 进程）
+# Container entrypoint (tini is PID 1; this exec-replaces into DSH).
 set -euo pipefail
 
-# dsh CLI 不在默认 PATH（node:bookworm-slim 无 node_modules/.bin），先补上
+# dsh CLI lives under node_modules/.bin, which is not on the slim-image PATH.
 export PATH="/app/template-profile/node_modules/.bin:$PATH"
 
-# ---------- 状态卷就绪 ----------
 mkdir -p /data/agents
 
-# ---------- 首启：初始化 web profile（模板 → 状态卷） ----------
 PROFILE_WEB="/data/profiles/web"
 TPL="/app/template-profile"
 
 if [ ! -f "$PROFILE_WEB/package.json" ]; then
   echo "[dshc] first boot: provisioning web profile from read-only template"
   mkdir -p "$PROFILE_WEB"
-  # 清单文件复制进状态卷（可被 DSH 热写：cordis.patch.yml、package.json 等）
-  # 含冻结的 pnpm-lock.yaml，保证后续 `dsh plugin` 安装仍以镜像版本为准（--frozen 一致性）
+  # Copy the manifest set incl. the frozen lockfile so later `dsh plugin`
+  # installs stay on the image's pinned closure; node_modules stays read-only
+  # unless the user opts into a writable copy (DSH_ALLOW_PLUGIN_INSTALL=1).
   cp -a \
     "$TPL/package.json" "$TPL/pnpm-workspace.yaml" "$TPL/pnpm-lock.yaml" \
     "$TPL/cordis.yml" "$TPL/cordis.patch.yml" \
     "$PROFILE_WEB/"
 
   if [ "${DSH_ALLOW_PLUGIN_INSTALL:-0}" = "1" ]; then
-    echo "[dshc] DSH_ALLOW_PLUGIN_INSTALL=1 -> copying node_modules into state volume (writable, ~380MB)"
+    echo "[dshc] DSH_ALLOW_PLUGIN_INSTALL=1 -> copying node_modules into state volume (~380MB)"
     cp -a "$TPL/node_modules" "$PROFILE_WEB/node_modules"
   else
-    # 默认：node_modules 只读符号链接指向镜像内闭包 → 镜像即版本、不可运行时装插件
+    # read-only symlink: the image closure IS the version; no runtime plugin install
     ln -s "$TPL/node_modules" "$PROFILE_WEB/node_modules"
   fi
 else
   echo "[dshc] profile already present in state volume; reusing"
-  # 默认只读模式下，若状态卷缺 node_modules 符号链接则补齐（幂等）。
-  # 注意：DSH_ALLOW_PLUGIN_INSTALL 只在首启生效；改开关需清 /data 卷重建才会复制。
+  # Re-add the symlink idempotently for read-only runs. DSH_ALLOW_PLUGIN_INSTALL
+  # applies only on first boot; changing it later needs a /data volume reset.
   [ -d "$PROFILE_WEB" ] && [ ! -e "$PROFILE_WEB/node_modules" ] && ln -s "$TPL/node_modules" "$PROFILE_WEB/node_modules" || true
 fi
 
-# ---------- 沙箱就绪自检（信息性；#2：默认 seccomp 下 Landlock 可用） ----------
-# launcher 在平台专属可选包下（node-addon-landlock-run-linux-{x64,arm64}/bin/landlock-run）
+# Informational sandbox readiness check. The launcher lives in the platform
+# package (node-addon-landlock-run-linux-{x64,arm64}/bin), not the umbrella pkg.
 case "$(uname -m)" in
   x86_64) L_ARCH="x64" ;;
   aarch64|arm64) L_ARCH="arm64" ;;
@@ -51,13 +50,14 @@ if [ -x "$LANDLOCK" ]; then
     echo "[dshc] sandbox: landlock probe failed — check host kernel (CONFIG_SECURITY_LANDLOCK) / seccomp"
   fi
 else
-  echo "[dshc] sandbox: launcher not found at $LANDLOCK (inspect node_modules layout)"
+  echo "[dshc] sandbox: launcher not found at $LANDLOCK"
 fi
 
-# ---------- 0.0.0.0 显式放行（DSH CLI 拒绝 --host 0.0.0.0，用 loader patch 覆盖 webserver 行） ----------
+# DSH rejects --host 0.0.0.0 by design; the loader patch overrides the
+# webserver row instead, binding 0.0.0.0 so `docker -p` can reach the GUI.
 OVERLAY=/app/overlay/webstartup.yml
-[ -f "$OVERLAY" ] && echo "[dshc] applying overlay: bind 0.0.0.0:3080 via --patch $OVERLAY" || { echo "[dshc] ERROR: overlay missing" >&2; exit 1; }
+[ -f "$OVERLAY" ] || { echo "[dshc] ERROR: overlay missing" >&2; exit 1; }
+echo "[dshc] applying overlay: bind 0.0.0.0:3080 via --patch $OVERLAY"
 
-# ---------- 以 dsh 用户 exec 启动（保持 SIGTERM 优雅退出） ----------
 echo "[dshc] starting: dsh --profile web --patch $OVERLAY"
 exec dsh --profile web --patch "$OVERLAY" "$@"

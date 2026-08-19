@@ -7,6 +7,8 @@ Conventions for agents working in this repository.
 To avoid encoding surprises in code and tooling, all project text is written in **English**:
 
 - Code comments, source files, docs, and commit messages are in English.
+- Comments are restrained: write one only when it explains *why* something is
+  non-obvious — never restate what the code does.
 - Chinese (or other non-ASCII) appears only in:
   - `*.zh.md` files — user-facing Chinese translations (e.g. `README.zh.md`);
   - places the human explicitly requested Chinese (e.g. this chat, the wayfinder

@@ -1,6 +1,6 @@
-# dshc — Docker Compose（默认硬化）
-# 用法：export DEEPSEEK_API_KEY=... ; docker compose up -d
-# 浏览器访问 http://127.0.0.1:3080
+# dshc — hardened Compose defaults
+# Quick start: export DEEPSEEK_API_KEY=sk-... ; docker compose up -d --build
+# Browser: http://127.0.0.1:3080
 services:
   dshc:
     image: ghcr.io/hyooeewee/dshc:latest
@@ -10,16 +10,15 @@ services:
     hostname: dshc
     restart: unless-stopped
 
-    # -- 默认硬化（#8 / #2）-----------
-    read_only: true                 # rootfs 只读，唯一可写点：/data、/workspace、/tmp(tmpfs)
+    # hardened defaults (#8 / #2: Landlock works under default seccomp)
+    read_only: true
     tmpfs:
       - /tmp
     security_opt:
-      - no-new-privileges:true      # 禁止提权；Landlock 沙箱基于 no_new_privs 即可用
-    # 默认 seccomp 保留（#2：Landlock 在默认 seccomp 下可用，不需要 seccomp=unconfined/--privileged）
+      - no-new-privileges:true
+    # drop all caps, then restore Docker's normal default cap set
     cap_drop:
       - ALL
-    # 补回 Docker 常规默认 cap 集合（尽量贴近“无额外特权”）
     cap_add:
       - CHOWN
       - DAC_OVERRIDE
@@ -39,22 +38,22 @@ services:
     mem_limit: 4g
     cpus: 2
 
-    # -- 端口：容器内 0.0.0.0（overlay 放行），宿主侧默认仅映射到 localhost，不暴露局域网 ----
+    # host maps only to loopback; egress stays open (LLM API / web_search / SSH)
     ports:
       - "127.0.0.1:3080:3080"
 
-    # -- 状态与隔离 --------------------
     volumes:
-      - dshc-data:/data            # 状态卷 = DSH_HOME（配置/凭证/会话/技能/插件）
-    # 默认无宿主工作区挂载 → 容器边界最强隔离。需要处理宿主目录时显式挂载（会穿透边界！），
-    # 示例（只读只挂一个目录）： - ./host-folder:/workspace:ro
+      - dshc-data:/data            # state volume = DSH_HOME
+    # No host workspace mount by default keeps the boundary tight. To work on a
+    # host dir you must mount it explicitly (it crosses the boundary):
+    #   - ./host-folder:/workspace:ro
 
-    # -- 密钥/环境：DSH 将 DEEPSEEK_* 列为 bootstrap 变量，禁止写 .env；经环境变量注入 ----
+    # DEEPSEEK_* are bootstrap vars DSH forbids in .env; inject via environment
     environment:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DSH_PERMISSION_MODE: workspace-write
       DSH_TELEMETRY_DISABLED: "1"
-      # DSH_ALLOW_PLUGIN_INSTALL: "1"   # 可选：允许运行时装插件（node_modules 复制进状态卷）
+      # DSH_ALLOW_PLUGIN_INSTALL: "1"   # opt-in runtime plugin install (writable node_modules)
 
 volumes:
   dshc-data:
