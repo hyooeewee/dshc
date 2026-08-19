@@ -1,5 +1,5 @@
 node_modules/
 .env
 *.log
-# research 一次性产物（保留在历史/研究分支，不入 main 追踪）
+# research one-off artifacts (kept in git history/research branches; untracked on main)
 research/

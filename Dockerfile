@@ -12,6 +12,7 @@ ARG APT_MIRROR=deb.debian.org
 
 FROM node:${NODE_VERSION}-bookworm-slim AS builder
 ARG APT_MIRROR=deb.debian.org
+ENV DEBIAN_FRONTEND=noninteractive
 # build toolchain so native modules (node-pty etc.) compile when a prebuild is
 # unavailable under buildx/QEMU for arm64
 RUN for f in /etc/apt/sources.list /etc/apt/sources.list.d/*; do [ -f "$f" ] && sed -i "s|deb.debian.org|$APT_MIRROR|g" "$f"; done \
@@ -28,11 +29,12 @@ RUN pnpm install --prod --frozen-lockfile \
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 ARG APT_MIRROR=deb.debian.org
+ENV DEBIAN_FRONTEND=noninteractive
 # bash for the DSH bash tool; bwrap as an opt-in sandbox fallback; curl for
-# HEALTHCHECK; tini handles signals/reaping as PID 1
+# HEALTHCHECK; tini handles signals/reaping as PID 1; passwd provides useradd
 RUN for f in /etc/apt/sources.list /etc/apt/sources.list.d/*; do [ -f "$f" ] && sed -i "s|deb.debian.org|$APT_MIRROR|g" "$f"; done \
  && apt-get update \
- && apt-get install -y --no-install-recommends bash bubblewrap ca-certificates curl tini \
+ && apt-get install -y --no-install-recommends bash bubblewrap ca-certificates curl tini passwd \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --create-home --uid 1000 dsh
 

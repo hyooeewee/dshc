@@ -1,4 +1,4 @@
-# 保证 shell/Docker 文件在 Windows 检出下仍用 LF（容器内 shell 脚本要求 LF）
+# keep LF for shell/Docker paths on Windows checkouts (container shell needs LF)
 *.sh text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
