@@ -3,7 +3,7 @@
 Run **DSH (DeepSeek Harness)** safely inside Docker: multi-arch (`linux/amd64` + `linux/arm64`),
 default-hardened, built from a self-contained, reproducible dependency closure.
 
-> Chinese docs: [README.zh.md](README.zh.md)
+> 📖 中文文档：[README.zh.md](README.zh.md)
 > Design: [docs/design.md](docs/design.md) · Security: [docs/security.md](docs/security.md) · Usage: [docs/usage.md](docs/usage.md)
 
 ## Quick start
