@@ -27,11 +27,14 @@ DSH 会把 `DEEPSEEK_API_KEY` 当默认凭证使用；也可改在状态卷预�
 默认只读闭包不可装插件（`node_modules` 只读符号链接）。需要时：
 
 ```bash
-# 首次启动前开开关；之后 node_modules 会复制进状态卷 /data，可持久安装
+# 该开关只在首次启动生效：在第一次 `up` 前设好，之后才会把 node_modules 复制进状态卷。
+# 若已以默认模式启动过，需 `docker compose down -v`（清 /data 卷）再按此启动。
 DSH_ALLOW_PLUGIN_INSTALL=1 docker compose up -d --build
 # 进容器执行安装（示范）
 docker compose exec dshc dsh plugin --profile web add <package>
 ```
+
+> 注意：`DSH_ALLOW_PLUGIN_INSTALL` 是「首启」开关；运行中改它无效。
 
 ## 升级 DSH（重建镜像）
 
@@ -54,7 +57,10 @@ docker compose exec dshc dsh plugin --profile web add <package>
 
 ## headless 一次性模式（CI 友好）
 
+镜像 entrypoint 默认引导 **web** profile（并带 0.0.0.0 覆盖层），所以跑 headless 需**覆写 entrypoint** 为 `dsh` 才能进入 headless 引导：
+
 ```bash
-docker compose run --rm dshc dsh --profile headless "你的任务"
+docker compose run --rm --entrypoint dsh dshc --profile headless "你的任务"
 ```
+
 无监听端口、跑完退出——方便脚本化/CI。

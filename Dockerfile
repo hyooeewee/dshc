@@ -7,11 +7,15 @@
 
 ARG NODE_VERSION=22
 ARG PNPM_VERSION=11.22.0
+# apt 镜像（默认 deb.debian.org 保公共仓库纯净；中国区本地构建可传 mirrors.aliyun.com / mirrors.tuna.tsinghua.edu.cn 等）
+ARG APT_MIRROR=deb.debian.org
 
 # ================= 阶段一：builder —— 构造锁定的依赖闭包 =================
 FROM node:${NODE_VERSION}-bookworm-slim AS builder
+ARG APT_MIRROR=deb.debian.org
 # 原生模块(node-pty 等)在 multi-arch(QEMU) 下若预编译不可用则需本地编译
-RUN apt-get update \
+RUN for f in /etc/apt/sources.list /etc/apt/sources.list.d/*; do [ -f "$f" ] && sed -i "s|deb.debian.org|$APT_MIRROR|g" "$f"; done \
+ && apt-get update \
  && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm@${PNPM_VERSION}
@@ -23,9 +27,11 @@ RUN pnpm install --prod --frozen-lockfile \
 
 # ================= 阶段二：runtime —— 只读 + 非 root + 硬化 =================
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
+ARG APT_MIRROR=deb.debian.org
 # 系统依赖：bash（DSH Linux bash 工具）· bubblewrap（备用/高级沙箱）·
 # ca-certificates（HTTPS 出站到 api.deepseek.com 等）· curl（healthcheck）· tini（PID1 信号/优雅退出）
-RUN apt-get update \
+RUN for f in /etc/apt/sources.list /etc/apt/sources.list.d/*; do [ -f "$f" ] && sed -i "s|deb.debian.org|$APT_MIRROR|g" "$f"; done \
+ && apt-get update \
  && apt-get install -y --no-install-recommends bash bubblewrap ca-certificates curl tini \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --create-home --uid 1000 dsh
@@ -47,7 +53,9 @@ USER dsh
 ENV DSH_HOME=/data \
     DSH_AGENTS_HOME=/data/agents \
     DSH_PERMISSION_MODE=workspace-write \
-    DSH_TELEMETRY_DISABLED=1
+    DSH_TELEMETRY_DISABLED=1 \
+    HOME=/data \
+    PATH="/app/template-profile/node_modules/.bin:$PATH"
 EXPOSE 3080
 
 # 优雅退出 + 健康检查（DSH 进程自身处理 SIGTERM 5s 宽限）
