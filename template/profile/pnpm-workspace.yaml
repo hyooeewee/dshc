@@ -2,7 +2,7 @@ packages:
   - .
 
 nodeLinker: hoisted
-autoInstallPeers: false
+autoInstallPeers: true
 # dshc container build: disable the minimum-release-age supply-chain gate here
 # so the image build is self-contained and never trips on freshly-published
 # DSH plugin/market releases (the upstream publishes frequently). The host
