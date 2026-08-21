@@ -7,8 +7,8 @@
 1. **平台**：Linux，`node:22-bookworm-slim`，amd64 + arm64 多架构（buildx）。DSH 在非 win32 用 bash 模式，无需 pwsh；glibc → 勿用 alpine。
 2. **DSH 内容**：是可 npm 安装的依赖闭包，不是 git 源码。镜像只需 `template/profile/` 的 `package.json + pnpm-workspace.yaml + pnpm-lock.yaml`（+ minimal cordis*），`pnpm install --prod --frozen-lockfile` 即可复现。公共 registry、匿名可解析、无需私钥。
    - 模板已内部自洽：`pnpm-workspace.yaml` 设 `minimumReleaseAge: 0`（容器自带策略，不追上游高频发版）；manifest 与 lockfile importer 对齐。
-   - 体积实测：node_modules ≈384MB / 37k 文件；`--prod` 必做，可再清 node-pty 非 linux 预编译（省 ~20MB）。
-3. **沙箱**（#2 结论）：默认 seccomp 下 **Landlock 可用、零额外权限**（三个 landlock syscall 无条件放行，launcher 用 no_new_privs）；bwrap 需特权级放行。DSH 自动回退 bwrap→landlock，不 fail-closed。compose 保留默认 seccomp、不去加特权。入口就绪自检跑 `landlock-run --probe`。
+   - 体积实测：node_modules ≈384MB / 37k 文件；`--prod` 必做。**注意：node-pty 不含预编译（tarball 无 prebuilds/ 目录，需 node-gyp 从源码编译）→ builder 必须装 python3/make/g++（实测验证，R2 此前「node-pty 带预编译」结论有误）**；koffi/sharp/landlock launcher 才有 prebuild。
+3. **沙箱**（#2 结论）：默认 seccomp 下 **Landlock 可用、零额外权限**（三个 landlock syscall 无条件放行，launcher 用 no_new_privs）；bwrap 需特权级放行。DSH 自动回退 bwrap→landlock，不 fail-closed。compose 保留默认 seccomp、不去加特权。**镜像默认不内置 bwrap**（默认硬化完全走 Landlock；走 bwrap 属高级，需自行安装 + seccomp=unconfined）。入口就绪自检跑 `landlock-run --probe`。
 4. **用户模型**：单用户单实例，无内置认证。
 5. **网络**：出站全开（LLM API / web_search / SSH / cloudflared 按需）；入站仅 3080。容器内绑 0.0.0.0 由入口 `--patch overlay/webstartup.yml` 显式放行（DSH CLI 有意拒绝 `--host 0.0.0.0`）；宿主侧 compose 只映射 `127.0.0.1:3080:3080`。
 6. **持久化**：无状态镜像 + 状态卷 `/data`（=DSH_HOME，含 `profiles/`、`sessions/`、`settings.yaml`、`.credentials.yaml`、`storages/`、`skills/`、`dsh-ssh.json`）；`DSH_AGENTS_HOME=/data/agents` 同卷。首启把模板复制进 `/data/profiles/web`，`node_modules` 默认只读符号链接（镜像=版本），`DSH_ALLOW_PLUGIN_INSTALL=1` 时真复制到状态卷（可装插件、持久化）。

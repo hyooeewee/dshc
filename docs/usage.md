@@ -51,7 +51,7 @@ docker compose exec dshc dsh plugin --profile web add <package>
 
 - `docker compose logs -f dshc` — 看启动日志与 `[dshc] sandbox:` 自检行。
 - `docker compose exec dshc dsh --profile web --dump-config` — dump 构成树；确认 `webserver.config.host=0.0.0.0` 已应用。
-- 沙箱不可用：确认宿主内核 `CONFIG_SECURITY_LANDLOCK=y` 且 `CONFIG_LSM` 含 `landlock`；或需 bwrap 时用 `--security-opt seccomp=unconfined`+非特权 userns（高级）。
+- 沙箱不可用：确认宿主内核 `CONFIG_SECURITY_LANDLOCK=y` 且 `CONFIG_LSM` 含 `landlock`；或需 bwrap 时用 `--security-opt seccomp=unconfined`+非特权 userns，并自行在容器内安装 bwrap（镜像默认未内置，高级）。
 - 端口没通：确认 `docker compose ps` 里 `127.0.0.1:3080->3080` 已列出；别把容器内绑定误当作覆盖层未生效。
 - 状态没持久：`docker compose down` 不删卷；`docker compose down -v` 才会删 `/data`。
 

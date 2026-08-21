@@ -25,7 +25,7 @@ open http://127.0.0.1:3080
 | 数据 | 无状态镜像 + 状态卷 `/data`(=DSH_HOME)，代码只读 | [design](docs/design.md) |
 | 工作区 | 默认容器内隔离 `/workspace`，不碰宿主；显式挂载=穿透边界 | [security](docs/security.md) |
 | 会话 | 默认 `workspace-write` + GUI 审批；`danger-full-access` 只影响容器内 | [security](docs/security.md) |
-| 沙箱 | Linux Landlock（默认 seccomp 可用，零额外权限）；bwrap 备用 | [security](docs/security.md) |
+| 沙箱 | Linux Landlock（默认 seccomp 可用，零额外权限）；bwrap 未内置（高级可自装） | [security](docs/security.md) |
 | 网络 | 出站全开；入站仅 3080，宿主默认仅映射 localhost；无内置认证 | [security](docs/security.md) |
 | 密钥 | `DEEPSEEK_API_KEY` 经环境变量/`--env-file` 注入 | [usage](docs/usage.md) |
 | 插件 | 默认闭包不可运行时装插件；开 `DSH_ALLOW_PLUGIN_INSTALL=1` 可装且持久 | [usage](docs/usage.md) |

@@ -22,7 +22,7 @@
 
 ## 沙箱（Linux）
 
-DSH 在 Linux 用 **bash** 模式，命令经 `bash -c` 交给沙箱：后端链 `bwrap → landlock`，按探测自动回退。默认 seccomp 下 **Landlock** 生效（三个 landlock syscall 无条件放行 + no_new_privs），**bwrap 用不了**（`unshare/mount/pivot_root` 被拦）。若目标机内核未启用 `CONFIG_SECURITY_LANDLOCK=y` 且 LSM 含 `landlock`，Landlock 会不可用——那是唯一需要评估宿主内核的点。日志可通过 `docker logs` 看 `[dshc] sandbox:` 自检行。
+DSH 在 Linux 用 **bash** 模式，命令经 `bash -c` 交给沙箱：后端链 `bwrap → landlock`，按探测自动回退。默认 seccomp 下 **Landlock** 生效（三个 landlock syscall 无条件放行 + no_new_privs），**bwrap 用不了**（`unshare/mount/pivot_root` 被拦）。**镜像默认不内置 bwrap**——默认硬化完全依赖 Landlock；要走 bwrap（`seccomp=unconfined` 等）需用户自行在容器里安装（高级）。若目标机内核未启用 `CONFIG_SECURITY_LANDLOCK=y` 且 LSM 含 `landlock`，Landlock 会不可用——那是唯一需要评估宿主内核的点。日志可通过 `docker logs` 看 `[dshc] sandbox:` 自检行。
 
 ## 密钥
 
