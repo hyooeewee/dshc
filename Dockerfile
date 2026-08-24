@@ -61,19 +61,20 @@ COPY overlay/ ./overlay/
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# The state volume hosts $HOME: everything DSH writes lands at the upstream
-# default ~/.dsh (= /data/.dsh) and survives container lifetimes; /workspace
-# stays isolated.
-RUN mkdir -p /data /workspace && chown dsh:dsh /data /workspace
-VOLUME ["/data", "/workspace"]
-WORKDIR /data
+# The harness state lives at the upstream-default ~/.dsh; compose mounts the
+# named volume exactly there, and the workspace bind at ~/workspace. Both sit
+# inside $HOME so every home-rooted UI surface sees them.
+RUN mkdir -p /home/dsh/.dsh /home/dsh/workspace && chown dsh:dsh /home/dsh/.dsh /home/dsh/workspace
+VOLUME ["/home/dsh/.dsh"]
+WORKDIR /home/dsh/workspace
 USER dsh
-# HOME sits on the state volume because the rootfs is read-only: everything
-# dotfile-style (~/.dsh, ~/.agents) lands there and survives restarts. No
-# DSH_* path/mode overrides — upstream defaults apply unchanged. PATH exposes
-# the closure's binaries image-wide (single owner; entrypoint inherits it).
-ENV HOME=/data \
-    PATH="/app/dsh/node_modules/.bin:$PATH"
+# HOME stays the image default (/home/dsh) — no override. Two mechanical
+# additions only: PATH exposes the closure's binaries image-wide;
+# npm_config_store_dir gives runtime pnpm runs (profile self-heal, plugin
+# installs) a writable store on the state volume instead of the read-only
+# rootfs default ~/.local/share/pnpm.
+ENV PATH="/app/dsh/node_modules/.bin:$PATH" \
+    npm_config_store_dir=/home/dsh/.dsh/pnpm-store
 
 EXPOSE 3080
 STOPSIGNAL SIGTERM

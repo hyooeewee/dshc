@@ -7,8 +7,11 @@
 | `DEEPSEEK_API_KEY` | LLM 凭证（bootstrap 变量，只能经 env 注入） |
 | `DEEPSEEK_BASE_URL` | 可选，自定义 LLM 端点（默认 `https://api.deepseek.com`） |
 | `DSH_PERMISSION_MODE` | `workspace-write`(默认) / `danger-full-access`（仅容器内） |
+| `DSHC_LOCALE` / `DSHC_THEME` | 首启偏好种子：GUI 语言（`zh`/`en`）与外观（`light`/`dark`/`system`）。entrypoint 仅在 `settings.yaml` 尚不存在时写入；之后界面上的修改落盘该文件，重启永不覆盖 |
 
 > 遥测：compose 固定注入 `DSH_TELEMETRY_DISABLED=1`（上游默认开；该变量是单向开关，任何非空值都关闭）。想开遥测需删除 compose.yml 里那一行。
+>
+> 工作目录：会话工作区经 overlay 钉在 `/home/dsh/workspace`（即宿主 `./workspace`，位于 `$HOME` 之下——目录选择器等工作界面硬编码从 `homedir()` 起浏览，工作区必须住在家里才能被看到）。基线组合默认用 `process.cwd()`，overlay 覆盖了 `sandbox-policy.workspaceRoot` 与 `fs-sandbox.cwd`；想调整编辑 `overlay/webstartup.yml`。
 
 ## 密钥注入
 

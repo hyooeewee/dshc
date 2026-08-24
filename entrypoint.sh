@@ -8,6 +8,22 @@
 # app-boot sources, dshc#11). The state volume only needs to be writable.
 set -euo pipefail
 
+# First-boot preference seed. DSH has no env var or CLI flag for UI
+# preferences; they persist in the Host settings document instead. Seed it
+# only when absent — afterwards the file belongs to the user's GUI edits and
+# must never be rewritten here.
+SETTINGS=/home/dsh/.dsh/settings.yaml
+if [ ! -f "$SETTINGS" ]; then
+  mkdir -p "${SETTINGS%/*}"
+  touch "$SETTINGS"
+  case "${DSHC_LOCALE:-}" in
+    zh|en) printf 'locale:\n  preference: %s\n' "$DSHC_LOCALE" >> "$SETTINGS" ;;
+  esac
+  case "${DSHC_THEME:-}" in
+    light|dark|system) printf 'ui-theme:\n  preference: %s\n' "$DSHC_THEME" >> "$SETTINGS" ;;
+  esac
+fi
+
 # Informational sandbox readiness check. The launcher lives in the platform
 # package (node-addon-landlock-run-linux-{x64,arm64}/bin), not the umbrella pkg.
 case "$(uname -m)" in
