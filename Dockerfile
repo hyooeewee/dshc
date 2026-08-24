@@ -1,49 +1,52 @@
 # syntax=docker/dockerfile:1
-# Multi-arch (amd64/arm64) hardened build. Decisions tracked in the wayfinder
-# map (hyooeewee/dshc#1): Landlock works under default seccomp so no privileged
-# flags are added (#2); --prod --frozen-lockfile over the pinned closure keeps
-# the image reproducible (#3); /app read-only, /data = DSH_HOME state volume,
-# /workspace isolated (#4).
-# Only NODE_VERSION is consumed by FROM, so it must stay global; every other
-# ARG is used inside stages, where Docker only sees a value after an in-stage
-# ARG declaration (a pre-FROM ARG is empty there, and PNPM_VERSION had to move
-# in to actually pin the pnpm version).
+# Multi-arch (amd64/arm64) hardened image for DSH. Decisions live in the
+# wayfinder map hyooeewee/dshc#1.
+#
+# Build-knob panel — every ARG and its default lives here, once (network
+# knobs are overridable via compose build.args / .env). Stages re-declare a
+# bare `ARG <name>` to import; without that line a global ARG is empty inside
+# the stage. Only NODE_VERSION feeds FROM directly.
+# Toolchain pins live in install/package.json instead: `packageManager` pins
+# pnpm (corepack reads it), `engines.node` fails the install on drift —
+# NODE_VERSION stays an ARG only because FROM cannot read manifests.
 ARG NODE_VERSION=22
-
-FROM node:${NODE_VERSION}-bookworm-slim AS builder
-ARG PNPM_VERSION=11.22.0
-# apt mirror (default upstream; pass --build-arg APT_MIRROR=mirrors.aliyun.com
-# for throttled networks)
 ARG APT_MIRROR=deb.debian.org
-# npm registry (default upstream; pass
-# --build-arg NPM_REGISTRY=https://registry.npmmirror.com for slow networks)
 ARG NPM_REGISTRY=https://registry.npmjs.org
-ENV DEBIAN_FRONTEND=noninteractive npm_config_registry=$NPM_REGISTRY
-# node-pty ships no prebuild (its tarball has no prebuilds/ dir and the prebuild
-# fetch is unreliable), so node-gyp compiles it: python3/make/g++ are required.
-# git stays out — the frozen install needs no git (dsh-browser is a recorded
-# codeload tarball). ca-certificates guards the cloudflared postinstall.
-# The apt cache mount keeps the 8MB metadata fetch one-time across builds;
-# sharing=locked serializes the two parallel stages against the shared cache.
+
+# ---- builder: resolve the frozen dependency closure ----
+FROM node:${NODE_VERSION}-bookworm-slim AS builder
+ARG APT_MIRROR
+ARG NPM_REGISTRY
+# COREPACK_NPM_REGISTRY routes the pnpm CLI download through the same mirror;
+# DOWNLOAD_PROMPT=0 keeps the first fetch non-interactive.
+ENV DEBIAN_FRONTEND=noninteractive npm_config_registry=$NPM_REGISTRY \
+    COREPACK_NPM_REGISTRY=$NPM_REGISTRY COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+
+# node-pty ships no prebuild -> node-gyp compiles it; git stays out because
+# every dependency resolves from registry tarballs. Cache mounts make the apt
+# metadata fetch one-time across builds (sharing=locked serializes stages).
 RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked --mount=type=cache,target=/var/cache/apt,sharing=locked \
  for f in /etc/apt/sources.list /etc/apt/sources.list.d/*; do [ -f "$f" ] && sed -i "s|deb.debian.org|$APT_MIRROR|g" "$f"; done \
  && apt-get update \
  && apt-get install -y --no-install-recommends python3 make g++ ca-certificates
-RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
-WORKDIR /opt/dsh-tpl
-COPY template/profile/ ./
-# minimumReleaseAge:0 in the workspace keeps the frozen install from tripping
-# on freshly-published DSH releases.
+# corepack picks the pnpm version from install/package.json's packageManager.
+RUN corepack enable
+
+# The minimal manifest declares only @deepseek-ai/dsh: the frozen closure IS
+# the installation; no out-of-tree plugins ship (#11).
+WORKDIR /opt/install
+COPY install/ ./
+# minimumReleaseAge:0 keeps the install off freshly-published DSH releases.
 RUN pnpm install --prod --frozen-lockfile \
  && pnpm store prune
 
+# ---- runtime: hardened minimal image ----
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
-ARG APT_MIRROR=deb.debian.org
+ARG APT_MIRROR
 ENV DEBIAN_FRONTEND=noninteractive
-# tini as PID 1 for signal/zombie handling; bash and useradd already ship in
-# the base image. Node brings its own CA bundle; system ca-certificates is kept
-# for non-node TLS consumers. bubblewrap is not installed: the sandbox runs on
-# Landlock under default seccomp, and bwrap would need privileges anyway (#2).
+# tini as PID 1 for signals/zombies; no bubblewrap — Landlock runs under
+# default seccomp without privileges (#2). dsh takes uid 10001: uid 1000 is
+# already `node` in the base image.
 RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked --mount=type=cache,target=/var/cache/apt,sharing=locked \
  for f in /etc/apt/sources.list /etc/apt/sources.list.d/*; do [ -f "$f" ] && sed -i "s|deb.debian.org|$APT_MIRROR|g" "$f"; done \
  && apt-get update \
@@ -51,28 +54,30 @@ RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked --mount=type=cac
  && useradd --create-home --uid 10001 dsh
 
 WORKDIR /app
-COPY --from=builder /opt/dsh-tpl ./template-profile
+# Only the closure ships; manifests stay behind — DSH writes its own profile
+# files into the state volume at runtime (#11).
+COPY --from=builder /opt/install/node_modules ./dsh/node_modules
 COPY overlay/ ./overlay/
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# state volume (DSH_HOME) + isolated workspace; mounted/composed at runtime
+# The state volume hosts $HOME: everything DSH writes lands at the upstream
+# default ~/.dsh (= /data/.dsh) and survives container lifetimes; /workspace
+# stays isolated.
 RUN mkdir -p /data /workspace && chown dsh:dsh /data /workspace
 VOLUME ["/data", "/workspace"]
 WORKDIR /data
-
-# non-root; HOME under the state volume so dotfile-style writes survive
 USER dsh
-ENV DSH_HOME=/data \
-    DSH_AGENTS_HOME=/data/agents \
-    DSH_PERMISSION_MODE=workspace-write \
-    DSH_TELEMETRY_DISABLED=1 \
-    HOME=/data \
-    PATH="/app/template-profile/node_modules/.bin:$PATH"
-EXPOSE 3080
+# HOME sits on the state volume because the rootfs is read-only: everything
+# dotfile-style (~/.dsh, ~/.agents) lands there and survives restarts. No
+# DSH_* path/mode overrides — upstream defaults apply unchanged. PATH exposes
+# the closure's binaries image-wide (single owner; entrypoint inherits it).
+ENV HOME=/data \
+    PATH="/app/dsh/node_modules/.bin:$PATH"
 
+EXPOSE 3080
 STOPSIGNAL SIGTERM
-# node's built-in fetch (bundled CA) replaces curl; the GUI returns 200 once up
+# GUI answers HTTP 200 once up; node's bundled fetch replaces curl.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3080/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 

@@ -7,8 +7,8 @@
 | `DEEPSEEK_API_KEY` | LLM 凭证（bootstrap 变量，只能经 env 注入） |
 | `DEEPSEEK_BASE_URL` | 可选，自定义 LLM 端点（默认 `https://api.deepseek.com`） |
 | `DSH_PERMISSION_MODE` | `workspace-write`(默认) / `danger-full-access`（仅容器内） |
-| `DSH_ALLOW_PLUGIN_INSTALL` | `1` 则首启把 node_modules 复制进状态卷（可装插件） |
-| `DSH_TELEMETRY_DISABLED` | 默认已 `1`（遥测默认关闭，双保险） |
+
+> 遥测：compose 固定注入 `DSH_TELEMETRY_DISABLED=1`（上游默认开；该变量是单向开关，任何非空值都关闭）。想开遥测需删除 compose.yml 里那一行。
 
 ## 密钥注入
 
@@ -22,29 +22,47 @@ docker compose up -d --build
 
 DSH 会把 `DEEPSEEK_API_KEY` 当默认凭证使用；也可改在状态卷预置 `.credentials.yaml`（DSH 原生凭证机制）。
 
+## .env 参数（构建与运行）
+
+项目根目录的 `.env`（已 gitignore，模板见 [.env.example](../.env.example)）由 compose 自动读取，无需再传 `--build-arg`：
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `APT_MIRROR` / `NPM_REGISTRY` | 上游官方源 | 慢网络时切国内镜像（**构建期**生效） |
+| `DSHC_PORT` | `3080` | 宿主侧 GUI 端口（始终只绑本机回环；dshc 无内置认证，见 [security](security.md)） |
+| `DSH_PERMISSION_MODE` | `workspace-write` | 容器内 agent 权限模式 |
+
+构建参数改动后需重新 `docker compose build`；运行参数 `docker compose up -d` 重启即生效。
+
 ## 插件：运行时安装
 
-默认只读闭包不可装插件（`node_modules` 只读符号链接）。需要时：
+镜像只含官方 in-box 闭包。装外挂插件走 DSH 原生机制（pnpm 装进状态卷的 profile 目录，持久、需网络）：
 
 ```bash
-# 该开关只在首次启动生效：在第一次 `up` 前设好，之后才会把 node_modules 复制进状态卷。
-# 若已以默认模式启动过，需 `docker compose down -v`（清 /data 卷）再按此启动。
-DSH_ALLOW_PLUGIN_INSTALL=1 docker compose up -d --build
-# 进容器执行安装（示范）
 docker compose exec dshc dsh plugin --profile web add <package>
 ```
 
-> 注意：`DSH_ALLOW_PLUGIN_INSTALL` 是「首启」开关；运行中改它无效。
+> 注意：本方案已无「模板复制」与 `DSH_ALLOW_PLUGIN_INSTALL` 开关（#11 决议移除）；profile 由 DSH 首次启动自动初始化。
 
 ## 升级 DSH（重建镜像）
 
-模板锁定了版本（`template/profile/pnpm-lock.yaml`）。升级 = 更新模板三件套（从一份新 DSH profile 复制）→ `docker compose build` → 重起。`minimumReleaseAge:0` 使其不因线上刚发布的版本而失败。
+版本钉子的位置：
+
+| 钉什么 | 在哪 | 谁来校验 |
+|---|---|---|
+| DSH 版本 | `install/package.json` 的 `dependencies` | 锁文件冻结 |
+| pnpm 版本 | `install/package.json` 的 `packageManager` 字段 | corepack 自动取用 |
+| Node 大版本 | `install/package.json` 的 `engines.node` + Dockerfile 顶部 `NODE_VERSION` | 安装时不匹配即警告；FROM 标签无法读 manifest，两者需同步改 |
+
+升级 = 改对应字段 → 重新生成锁文件（`cd install && pnpm install --prod --lockfile-only`）→ `docker compose build` → 重起。`minimumReleaseAge:0` 使其不因线上刚发布的版本而失败。
+
+> 从旧版升级到本版：请先 `docker compose down -v` 重置状态卷。两类旧卷都会失效（预期行为）：template/ 三件套时代的卷列着已移除的社区包，新镜像会因解析失败拒绝启动；官方闭包初版（`DSH_HOME=/data`）的卷，数据在 `/data/profiles/` 等顶层路径，而本版 harness home 回归上游默认 `~/.dsh` = `/data/.dsh`——旧数据不会被读到，DSH 会当作全新状态重新初始化。
 
 ## 远程访问
 
 默认 `localhost:3080` 仅本机。远程三种选择：
 - **SSH 隧道**（推荐，零新增服务）：`ssh -L 3080:127.0.0.1:3080 user@host`，再访问本地 `http://127.0.0.1:3080`。
-- **cloudflared 快速隧道**：容器内已含 `dsh-remote-web-ui` 插件，可用其公网隧道。
+- **cloudflared 快速隧道**：需先安装提供该能力的外挂插件（见「插件」章节）。
 - **反向代理**：Nginx/Caddy + TLS（+ basic auth），并给 DSH 加 `--trusted-host`。
 
 ## 排障
@@ -61,7 +79,7 @@ docker compose exec dshc dsh plugin --profile web add <package>
 
 ```bash
 docker compose run --rm --entrypoint "node --expose-internals" dshc \
-  /app/template-profile/node_modules/@deepseek-ai/dsh/lib/bin.js --profile headless "你的任务"
+  /app/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js --profile headless "你的任务"
 ```
 
 无监听端口、跑完退出——方便脚本化/CI。

@@ -1,22 +1,29 @@
-# dshc — hardened Compose defaults
-# Quick start: export DEEPSEEK_API_KEY=sk-... ; docker compose up -d --build
-# Browser: http://127.0.0.1:3080
+# dshc — hardened compose defaults
+# Quick start: put DEEPSEEK_API_KEY in .env (see .env.example), then
+#   docker compose up -d --build
+# GUI: http://127.0.0.1:${DSHC_PORT:-3080}
+
 services:
   dshc:
     image: ghcr.io/hyooeewee/dshc:latest
-    build:
-      context: .
     container_name: dshc
     hostname: dshc
     restart: unless-stopped
 
-    # hardened defaults (#8 / #2: Landlock works under default seccomp)
+    build:
+      context: .
+      args:
+        APT_MIRROR:
+        NPM_REGISTRY:
+
+    # --- filesystem wall ---
     read_only: true
     tmpfs:
       - /tmp
+
+    # --- privilege wall ---
     security_opt:
       - no-new-privileges:true
-    # drop all caps, then restore Docker's normal default cap set
     cap_drop:
       - ALL
     cap_add:
@@ -34,26 +41,26 @@ services:
       - MKNOD
       - AUDIT_WRITE
       - SETFCAP
+
+    # --- resource wall ---
     pids_limit: 512
     mem_limit: 4g
     cpus: 2
 
-    # host maps only to loopback; egress stays open (LLM API / web_search / SSH)
     ports:
-      - "127.0.0.1:3080:3080"
+      - "127.0.0.1:${DSHC_PORT:-3080}:3080"
 
     volumes:
-      - dshc-data:/data            # state volume = DSH_HOME
-    # No host workspace mount by default keeps the boundary tight. To work on a
-    # host dir you must mount it explicitly (it crosses the boundary):
-    #   - ./host-folder:/workspace:ro
+      - dshc-data:/data
+      - ./workspace:/workspace
 
-    # DEEPSEEK_* are bootstrap vars DSH forbids in .env; inject via environment
     environment:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      DSH_PERMISSION_MODE: workspace-write
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-}
+      DSH_PERMISSION_MODE: ${DSH_PERMISSION_MODE:-workspace-write}
+      # Privacy posture: upstream ships telemetry ON; any non-empty value
+      # disables it (one-way switch — even "0"). Delete this line to enable.
       DSH_TELEMETRY_DISABLED: "1"
-      # DSH_ALLOW_PLUGIN_INSTALL: "1"   # opt-in runtime plugin install (writable node_modules)
 
 volumes:
   dshc-data:

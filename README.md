@@ -18,10 +18,10 @@ open http://127.0.0.1:3080              # host-side default binds only localhost
 
 ```
 Dockerfile               multi-stage (locked closure → hardened runtime)
-entrypoint.sh            first-boot provisioning + 0.0.0.0 overlay + exec dsh
+entrypoint.sh            Landlock probe + 0.0.0.0 overlay + exec dsh (DSH self-initializes the profile)
 compose.yml              default hardening (read_only / cap_drop / no-new-privileges / ports / volumes)
 overlay/webstartup.yml   0.0.0.0 bind overlay (DSH rejects --host 0.0.0.0)
-template/profile/        frozen DSH profile (pnpm-lock.yaml, minimumReleaseAge:0)
+install/                 minimal install manifest (@deepseek-ai/dsh only; frozen lockfile, minimumReleaseAge:0)
 docs/                    design / security / usage
 ```
 

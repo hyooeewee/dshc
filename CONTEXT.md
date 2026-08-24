@@ -35,3 +35,11 @@ _Avoid_: 多租户、内置登录
 **多架构发布**:
 同一镜像标签同时构建 linux/amd64 与 linux/arm64（buildx），覆盖 x86 服务器与 Apple Silicon / ARM 主机。
 _Avoid_: 单架构镜像
+
+**in-box bundle（箱内 bundle）**:
+随 `@deepseek-ai/dsh` 安装本体依赖闭包分发的官方 bundle（如 dsh-base、dsh-web-app）；DSH 每次启动自动维护安装闭包的符号链接回退目录，profile 无需自带 node_modules。
+_Avoid_: 官方插件（口语可用；精确概念是"是否在安装本体闭包内"，与官方与否不完全重合）
+
+**外挂包（out-of-tree plugin）**:
+不在安装本体闭包内的插件（含第三方社区包）；运行时经 DSH 原生机制（`dsh plugin add`，需网络）装入 profile 目录。镜像默认不预装任何外挂包。
+_Avoid_: 自定义插件、模板插件

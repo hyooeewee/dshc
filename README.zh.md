@@ -22,22 +22,22 @@ open http://127.0.0.1:3080
 | 项 | 决策 | 文档 |
 |---|---|---|
 | 平台 | Linux amd64 + arm64 多架构，bookworm-slim | [design](docs/design.md) |
-| 数据 | 无状态镜像 + 状态卷 `/data`(=DSH_HOME)，代码只读 | [design](docs/design.md) |
+| 数据 | 无状态镜像 + 状态卷 `/data`（容器 `$HOME`，harness home 即上游默认 `~/.dsh`），代码只读 | [design](docs/design.md) |
 | 工作区 | 默认容器内隔离 `/workspace`，不碰宿主；显式挂载=穿透边界 | [security](docs/security.md) |
 | 会话 | 默认 `workspace-write` + GUI 审批；`danger-full-access` 只影响容器内 | [security](docs/security.md) |
 | 沙箱 | Linux Landlock（默认 seccomp 可用，零额外权限）；bwrap 未内置（高级可自装） | [security](docs/security.md) |
 | 网络 | 出站全开；入站仅 3080，宿主默认仅映射 localhost；无内置认证 | [security](docs/security.md) |
 | 密钥 | `DEEPSEEK_API_KEY` 经环境变量/`--env-file` 注入 | [usage](docs/usage.md) |
-| 插件 | 默认闭包不可运行时装插件；开 `DSH_ALLOW_PLUGIN_INSTALL=1` 可装且持久 | [usage](docs/usage.md) |
+| 插件 | 镜像只装官方闭包；外挂插件走 DSH 原生 `dsh plugin add`（装入状态卷，需网络） | [usage](docs/usage.md) |
 
 ## 目录布局
 
 ```
 ├── Dockerfile           多阶段构建（builder 锁闭包 → runtime 硬化）
-├── entrypoint.sh        首启模板复制 + 0.0.0.0 放行 + exec dsh
+├── entrypoint.sh        Landlock 自检 + 0.0.0.0 放行 + exec dsh（profile 由 DSH 首启自建）
 ├── compose.yml          默认硬化参数（read_only / cap_drop / no-new-privileges / 端口 / 卷）
 ├── overlay/webstartup.yml   0.0.0.0 绑定覆盖层（DSH 拒绝 --host 0.0.0.0，用 loader patch 放行）
-├── template/profile/    DSH profile 模板（lockfile 冻结，minimumReleaseAge:0）
+├── install/             极简安装清单（只声明 @deepseek-ai/dsh；lockfile 冻结，minimumReleaseAge:0）
 └── docs/                设计 / 安全 / 运行
 ```
 
@@ -56,4 +56,4 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 ## 许可注意
 
-仓库公开、镜像包私有。DSH 及其依赖（`@deepseek-ai/*`、`@linxin666/*`、`dshmarket`）的再分发许可未核查，公开镜像分发前请先评估（地图 #1「Out of scope」）。
+仓库公开、镜像包私有。DSH 及其依赖（`@deepseek-ai/*`）的再分发许可未核查，公开镜像分发前请先评估（地图 #1「Out of scope」）。

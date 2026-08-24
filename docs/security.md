@@ -27,13 +27,13 @@ DSH 在 Linux 用 **bash** 模式，命令经 `bash -c` 交给沙箱：后端链
 ## 密钥
 
 - `DEEPSEEK_API_KEY` 等 DEEPSEEK_* 变量是 DSH 的 bootstrap 变量，**禁止写 `.env`**；经环境变量（`docker compose` 的 `environment:` / `--env-file`）注入，最好放宿主 `.env` 并 gitignore。
-- `dsh-ssh.json`（含明文密码）由 dsh-ssh 插件写进 `/data` 状态卷 → 备份/权限要当凭证对待。
+- 若运行时装了会写凭证的外挂插件（如 dsh-ssh，其 `dsh-ssh.json` 含明文密码），文件落在 `/data` 状态卷 → 备份/权限要当凭证对待。
 - 仓库是 public：**不要在任何 issue/工单/提交里写密钥**（地图 #1 Notes 已写明）。
 
 ## 认证与远程访问
 
-容器**无内置认证**。默认只效力于本机 localhost。需要远程访问时，用 **SSH 隧道**、**cloudflared 快速隧道**（dsh-remote-web-ui 插件）或**反向代理 + basic auth**，并配 `--trusted-host`；不要把 3080 直接映射到公网。
+容器**无内置认证**。默认只效力于本机 localhost。需要远程访问时，用 **SSH 隧道**、**cloudflared 快速隧道**（需自行安装相应外挂插件）或**反向代理 + basic auth**，并配 `--trusted-host`；不要把 3080 直接映射到公网。
 
 ## 插件与镜像版本
 
-默认镜像闭包**不可在运行时装插件**（`node_modules` 只读符号链接）——镜像即版本。要装插件：开 `DSH_ALLOW_PLUGIN_INSTALL=1`（状态卷复制，可持久）或改模板重建镜像。这减少了镜像被运行时篡改的可写面，是一层安全选择。
+镜像只含官方 in-box 闭包（`@deepseek-ai/*`），rootfs 只读——镜像即版本。要装外挂插件：走 DSH 原生机制 `docker compose exec dshc dsh plugin --profile web add <package>`（pnpm 装进状态卷的 profile 目录，持久、需网络）。运行时插件写入面被限制在状态卷内，镜像闭包保持不可变。

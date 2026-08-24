@@ -1,0 +1,23 @@
+packages:
+  - .
+
+# Hoisted flat node_modules: the runtime image copies this directory as-is and
+# DSH's module-fallback healing resolves the whole installation closure from it.
+nodeLinker: hoisted
+# Peer dependencies must ship (e.g. @deepseek-ai/cordis-plugin-group) or boot
+# fails with ERR_MODULE_NOT_FOUND.
+autoInstallPeers: true
+# The container build is self-contained: never trip on freshly-published DSH
+# releases (upstream publishes frequently).
+minimumReleaseAge: 0
+# Native-module build approvals; without these pnpm skips postinstall scripts
+# and node-pty/koffi break at runtime.
+allowBuilds:
+  '@deepseek-ai/dsh-subprocess-local': true
+  '@google/genai': true
+  cloudflared: true
+  cpu-features: true
+  koffi: true
+  node-pty: true
+  protobufjs: true
+  ssh2: true
