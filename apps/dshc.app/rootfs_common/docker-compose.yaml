@@ -1,0 +1,52 @@
+# dshc — hardened compose defaults
+# Quick start: put DEEPSEEK_API_KEY in .env (see .env.example), then
+#   docker compose up -d --build
+# GUI: http://127.0.0.1:${DSHC_PORT:-3080}
+
+services:
+  dshc:
+    image: godotttt/dshc:v0.1.1
+    container_name: dshc
+    hostname: dshc
+    restart: unless-stopped
+
+    # --- filesystem wall ---
+    read_only: true
+    tmpfs:
+      - /tmp
+
+    # --- privilege wall ---
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - FSETID
+      - KILL
+      - SETGID
+      - SETUID
+      - SETPCAP
+      - NET_BIND_SERVICE
+      - NET_RAW
+      - SYS_CHROOT
+      - MKNOD
+      - AUDIT_WRITE
+      - SETFCAP
+
+    # --- resource wall ---
+    pids_limit: 512
+    mem_limit: 4g
+    cpus: 2
+
+    ports:
+      - "127.0.0.1:3080:3080"
+
+    volumes:
+      - dshc-data:/home/dsh/.dsh
+      - ${WORKSPACE}:/home/dsh/workspace
+
+volumes:
+  dshc-data:
