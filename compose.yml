@@ -5,13 +5,17 @@
 
 services:
   dshc:
-    image: ghcr.io/hyooeewee/dshc:latest
+    image: godotttt/dshc:latest
     container_name: dshc
     hostname: dshc
     restart: unless-stopped
 
     build:
       context: .
+      x-bake:
+        platforms:
+          - linux/amd64
+          - linux/arm64
       args:
         APT_MIRROR:
         NPM_REGISTRY:

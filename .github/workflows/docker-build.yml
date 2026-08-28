@@ -1,6 +1,6 @@
 name: build-dshc
 
-# dshc multi-arch image build (linux/amd64 + linux/arm64 -> ghcr.io/hyooeewee/dshc, private)
+# dshc multi-arch image build (linux/amd64 + linux/arm64 -> ghcr.io/hyooeewee/dshc + docker.io/godotttt/dshc)
 on:
   push:
     branches: [main]
@@ -22,6 +22,20 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Get Secrets
+              uses: bitwarden/sm-action@v2
+              with:
+                access_token: ${{ secrets.BW_ACCESS_TOKEN }}
+                secrets: |
+                  0aebfcde-7155-47c4-ba38-b4b40019e9d2 > DOCKER_USERNAME
+                  d501324f-13e1-4c16-817b-b4b4001aee09 > DOCKER_PAT
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_PAT }}
+
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -33,7 +47,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/hyooeewee/dshc
+          images: |
+            ghcr.io/hyooeewee/dshc
+            godotttt/dshc
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
