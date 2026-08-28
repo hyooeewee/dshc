@@ -1,6 +1,6 @@
 # dshc — DeepSeek Harness Container
 
-> 📖 [English](README.md) · [中文](README.zh.md)
+> 📖 [English](README.md) · 中文
 
 把 **DSH（DeepSeek Harness）** 安全地跑进 Docker：多架构（linux/amd64 + arm64）、默认硬化、基于自包含且可复现的依赖闭包构建。
 

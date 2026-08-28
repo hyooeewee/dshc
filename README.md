@@ -1,6 +1,6 @@
 # dshc — DeepSeek Harness Container
 
-> 📖 [English](README.md) · [中文](README.zh.md)
+> 📖 English · [中文](README.zh.md)
 
 Run **DSH (DeepSeek Harness)** safely inside Docker: multi-arch (`linux/amd64` + `linux/arm64`),
 default-hardened, built from a self-contained, reproducible dependency closure.
