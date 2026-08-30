@@ -60,6 +60,27 @@ manifest.dependencies = dependencies;
 manifest.overrides = UPSTREAM_PINS;
 writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 
+// npm 11 records a sha512 integrity for each file: tarball at lock generation.
+// Packed tarballs are re-generated per release (gzip mtimes differ between runs),
+// so a byte-level integrity on file: deps would make the committed lock fail
+// against freshly packed artifacts (EINTEGRITY). Strip it — the specifier keeps
+// pinning the exact path/version, registry deps keep their own integrity.
+const lockPath = join(root, 'install', 'package-lock.json');
+if (existsSync(lockPath)) {
+  const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
+  let stripped = 0;
+  for (const entry of Object.values(lock.packages)) {
+    if (entry && typeof entry.resolved === 'string' && entry.resolved.startsWith('file:')) {
+      delete entry.integrity;
+      stripped += 1;
+    }
+  }
+  if (stripped) {
+    writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n');
+    console.log(`lock: stripped file: integrity from ${stripped} entries`);
+  }
+}
+
 console.log(`manifest: ${manifestPath}`);
 console.log(`dshUpstreamVersion: ${version}`);
 console.log(`dependencies: ${Object.keys(dependencies).length} file: tarballs`);
