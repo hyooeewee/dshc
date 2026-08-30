@@ -1,10 +1,18 @@
 name: build-dshc
 
-# dshc multi-arch image build (linux/amd64 + linux/arm64 -> ghcr.io/hyooeewee/dshc + docker.io/godotttt/dshc)
+# dshc multi-arch image build (linux/amd64 + linux/arm64 -> ghcr.io/hyooeewee/dshc
+# + docker.io/godotttt/dshc) from the upstream GitHub tag source (map #12):
+#   job "pack"  replicates the upstream release pipeline on a native amd64
+#               runner and ships the packed closure as CI artifacts;
+#   job "build" runs the multi-arch docker build, which only installs that
+#               closure — platform-native deps resolve from the registry per
+#               architecture (no full build under QEMU).
+# Versioning: the dshc git tag IS the version pin (upstream npm-style, no "v");
+# on main pushes the version comes from the committed install/ package.json.
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    tags: ["[0-9]*"]
   workflow_dispatch:
 
 concurrency:
@@ -15,11 +23,111 @@ permissions:
   contents: read
   packages: write
 
+env:
+  UPSTREAM_REPO: deepseek-ai/deepseek-harness
+
 jobs:
+  pack:
+    name: Pack upstream DSH closure
+    runs-on: ubuntu-latest
+    outputs:
+      dsh_tag: ${{ steps.resolve.outputs.dsh_tag }}
+    steps:
+      # Only needed on main pushes (version read from the committed manifest);
+      # tag pushes carry the version in the ref name.
+      - name: Checkout dshc
+        if: github.ref_type != 'tag'
+        uses: actions/checkout@v4
+
+      - name: Resolve upstream version
+        id: resolve
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            tag="${{ github.ref_name }}"
+          else
+            tag="$(jq -r .dshUpstreamVersion install/package.json)"
+            [ -n "$tag" ] && [ "$tag" != "null" ]
+          fi
+          echo "dsh_tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Verify upstream tag exists
+        env:
+          DSH_TAG: ${{ steps.resolve.outputs.dsh_tag }}
+        run: |
+          git ls-remote "https://github.com/${{ env.UPSTREAM_REPO }}.git" "refs/tags/dsh-${DSH_TAG}" | grep -q . \
+            || { echo "::error::upstream tag dsh-${DSH_TAG} not found"; exit 1; }
+
+      - name: Set up Node.js (corepack provides pnpm@11.7.0)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Checkout upstream at tag
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UPSTREAM_REPO }}
+          ref: refs/tags/dsh-${{ steps.resolve.outputs.dsh_tag }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: upstream
+
+      - name: Install (frozen workspace)
+        working-directory: upstream
+        run: corepack enable && pnpm install --frozen-lockfile
+
+      - name: Build official profile
+        working-directory: upstream
+        run: pnpm run build:official
+
+      - name: Pack closure (dsh family)
+        working-directory: upstream
+        run: pnpm run release:pack --family dsh --out dist/npm
+
+      - name: Pack closure (vendored framework + landlock entry)
+        working-directory: upstream
+        run: |
+          pnpm run release:pack --family vendor --out dist/npm-vendor
+          pnpm --dir native/landlock-run run build:ts
+          pnpm --dir native/landlock-run/packages/entry pack --pack-destination "$PWD/dist/npm-landlock"
+
+      - name: Verify packed install (smoke gate)
+        working-directory: upstream
+        run: |
+          pnpm run release:verify-packed-install --family dsh \
+            --from dist/npm --from dist/npm-vendor --from dist/npm-landlock
+
+      - name: Upload closure artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-closure
+          path: |
+            upstream/dist/npm
+            upstream/dist/npm-vendor
+            upstream/dist/npm-landlock
+          if-no-files-found: error
+          retention-days: 7
+
   build:
+    name: Build & push multi-arch images
+    needs: pack
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download closure tarballs
+        uses: actions/download-artifact@v4
+        with:
+          name: dsh-closure
+          path: artifacts/
+
+      - name: Layout tarballs for the Dockerfile
+        run: |
+          mkdir -p dist
+          mv artifacts/upstream/dist/npm dist/npm
+          mv artifacts/upstream/dist/npm-vendor dist/npm-vendor
+          mv artifacts/upstream/dist/npm-landlock dist/npm-landlock
+          rm -rf artifacts
+          [ "$(ls dist/npm/*.tgz 2>/dev/null | wc -l)" -ge 1 ]
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -57,7 +165,7 @@ jobs:
             godotttt/dshc
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{raw}} # keep raw tag name
+            type=semver,pattern={{raw}} # keep raw tag name (map #12: no "v" prefix)
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -66,6 +174,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            dsh.upstream.version=${{ needs.pack.outputs.dsh_tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

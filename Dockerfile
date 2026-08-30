@@ -1,44 +1,57 @@
 # syntax=docker/dockerfile:1
 # Multi-arch (amd64/arm64) hardened image for DSH. Decisions live in the
-# wayfinder map hyooeewee/dshc#1.
+# wayfinder map hyooeewee/dshc#12 (source-build migration; endpoint ticket #16).
+#
+# The DSH closure is NOT resolved from the registry here: it comes from the
+# packed tarballs that CI job "pack" produces by replicating the upstream
+# release pipeline at an explicit GitHub tag (dist/npm + dist/npm-vendor +
+# dist/npm-landlock; platform-neutral pure-JS proven by prototype #15). This
+# file only installs that closure — per-architecture native modules resolve
+# from the registry at install time.
 #
 # Build-knob panel — every ARG and its default lives here, once (network
 # knobs are overridable via compose build.args / .env). Stages re-declare a
 # bare `ARG <name>` to import; without that line a global ARG is empty inside
 # the stage. Only NODE_VERSION feeds FROM directly.
-# Toolchain pins live in install/package.json instead: `packageManager` pins
-# pnpm (corepack reads it), `engines.node` fails the install on drift —
-# NODE_VERSION stays an ARG only because FROM cannot read manifests.
-ARG NODE_VERSION=22
+# Toolchain pins live in install/package.json instead: `engines.node` (^24)
+# fails the install on drift — NODE_VERSION stays an ARG only because FROM
+# cannot read manifests.
+ARG NODE_VERSION=24
 ARG APT_MIRROR=deb.debian.org
 ARG NPM_REGISTRY=https://registry.npmjs.org
 
-# ---- builder: resolve the frozen dependency closure ----
-FROM node:${NODE_VERSION}-bookworm-slim AS builder
+# ---- installer: resolve the packed closure (tarballs + frozen lockfile) ----
+FROM node:${NODE_VERSION}-bookworm-slim AS installer
 ARG APT_MIRROR
 ARG NPM_REGISTRY
-# COREPACK_NPM_REGISTRY routes the pnpm CLI download through the same mirror;
-# DOWNLOAD_PROMPT=0 keeps the first fetch non-interactive.
-ENV DEBIAN_FRONTEND=noninteractive npm_config_registry=$NPM_REGISTRY \
-    COREPACK_NPM_REGISTRY=$NPM_REGISTRY COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+ENV DEBIAN_FRONTEND=noninteractive npm_config_registry=$NPM_REGISTRY
 
-# node-pty ships no prebuild -> node-gyp compiles it; git stays out because
-# every dependency resolves from registry tarballs. Cache mounts make the apt
-# metadata fetch one-time across builds (sharing=locked serializes stages).
+# node-pty ships no prebuild -> node-gyp compiles it; koffi rebuilds from
+# source on the node 24 ABI (no prebuilds) -> cmake is required (prototype
+# finding, #15). git stays out — every dependency resolves from the local
+# tarballs + registry. Cache mounts make the apt metadata fetch one-time
+# across builds (sharing=locked serializes stages).
 RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked --mount=type=cache,target=/var/cache/apt,sharing=locked \
  for f in /etc/apt/sources.list /etc/apt/sources.list.d/*; do [ -f "$f" ] && sed -i "s|deb.debian.org|$APT_MIRROR|g" "$f"; done \
  && apt-get update \
- && apt-get install -y --no-install-recommends python3 make g++ ca-certificates
-# corepack picks the pnpm version from install/package.json's packageManager.
-RUN corepack enable
+ && apt-get install -y --no-install-recommends python3 make g++ cmake ca-certificates
 
-# The minimal manifest declares only @deepseek-ai/dsh: the frozen closure IS
-# the installation; no out-of-tree plugins ship (#11).
 WORKDIR /opt/install
 COPY install/ ./
-# minimumReleaseAge:0 keeps the install off freshly-published DSH releases.
-RUN pnpm install --prod --frozen-lockfile \
- && pnpm store prune
+# The packed closure ships in the build context; install/package.json references
+# it as sibling ../dist (repo layout: install/ + dist/ side by side), so the
+# tarballs land at /opt/dist, not inside the install root.
+COPY dist/npm /opt/dist/npm
+COPY dist/npm-vendor /opt/dist/npm-vendor
+COPY dist/npm-landlock /opt/dist/npm-landlock
+# The committed install/package.json pins each tarball as a file: dependency and
+# package-lock.json freezes the resolved tree. npm (not pnpm) mirrors the
+# upstream verify-packed-install semantics — pnpm cannot satisfy transitive
+# "^0.1.x" ranges from file: tarballs. Full install (no --omit=optional): the
+# platform optional packages are the runtime's native teeth (landlock-run
+# launcher, node-pty prebuilds, @esbuild/*, claude-agent-sdk/codex variants).
+RUN npm ci --no-audit --no-fund \
+ && npm cache clean --force
 
 # ---- runtime: hardened minimal image ----
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
@@ -56,7 +69,7 @@ RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked --mount=type=cac
 WORKDIR /app
 # Only the closure ships; manifests stay behind — DSH writes its own profile
 # files into the state volume at runtime (#11).
-COPY --from=builder /opt/install/node_modules ./dsh/node_modules
+COPY --from=installer /opt/install/node_modules ./dsh/node_modules
 COPY overlay/ ./overlay/
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

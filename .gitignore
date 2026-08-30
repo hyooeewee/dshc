@@ -1,5 +1,7 @@
 node_modules/
 .env
 *.log
+# packed closure tarballs (CI artifacts; dist/ must exist at build time — see RELEASE.md)
+dist/
 # research one-off artifacts (kept in git history/research branches; untracked on main)
 research/

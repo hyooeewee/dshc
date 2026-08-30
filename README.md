@@ -3,9 +3,11 @@
 > 📖 English · [中文](README.zh.md)
 
 Run **DSH (DeepSeek Harness)** safely inside Docker: multi-arch (`linux/amd64` + `linux/arm64`),
-default-hardened, built from a self-contained, reproducible dependency closure.
+default-hardened, built from the upstream **GitHub tag source** — GitHub releases lead npm
+publish by design, so images track the tag: the closure is packed once at that tag and
+installed per architecture (map #12).
 
-Design decisions: [docs/design.md](docs/design.md) · Security boundaries: [docs/security.md](docs/security.md) · Runbook: [docs/usage.md](docs/usage.md) · Driven by the wayfinder map [hyooeewee/dshc#1](https://github.com/hyooeewee/dshc/issues/1).
+Design decisions: [docs/design.md](docs/design.md) · Security boundaries: [docs/security.md](docs/security.md) · Runbook: [docs/usage.md](docs/usage.md) · Release flow: [RELEASE.md](RELEASE.md) · Wayfinder maps: [hyooeewee/dshc#1](https://github.com/hyooeewee/dshc/issues/1), [#12](https://github.com/hyooeewee/dshc/issues/12).
 
 ## Quick start
 
@@ -15,6 +17,10 @@ docker compose up -d --build
 open http://127.0.0.1:3080               # host port via DSHC_PORT in .env (default 3080)
 ```
 
+Local builds need the packed closure under `dist/` (CI produces it — download the
+`dsh-closure` artifact from a workflow run, or run the pack pipeline yourself; see
+[RELEASE.md](RELEASE.md)).
+
 Alternatively `export DEEPSEEK_API_KEY=sk-...` instead of `.env`. DSH forbids `DEEPSEEK_*`
 in container-side files; inject through the host-side environment either way.
 
@@ -23,6 +29,7 @@ in container-side files; inject through the host-side environment either way.
 | Area | Decision | Docs |
 |---|---|---|
 | Platform | Linux amd64 + arm64 multi-arch on bookworm-slim | [design](docs/design.md) |
+| Version source | Upstream GitHub tag source build (e.g. `0.1.2-alpha.1`); the dshc git tag IS the version pin — npm-style naming, no `v` prefix | [release](RELEASE.md) |
 | State | Stateless image; named volume mounted at the upstream-default `~/.dsh` (= `/home/dsh/.dsh`); code read-only | [design](docs/design.md) |
 | Workspace | Isolated at `~/workspace` by default, never touches the host; an explicit bind = deliberate boundary crossing | [security](docs/security.md) |
 | Sessions | `workspace-write` + GUI approval by default; `danger-full-access` affects the container only | [security](docs/security.md) |
@@ -38,25 +45,37 @@ All knobs live in `.env` (template: [.env.example](.env.example)) — build-time
 ## Layout
 
 ```
-Dockerfile               multi-stage (locked closure → hardened runtime)
+Dockerfile               multi-stage (packed closure install → hardened runtime)
 entrypoint.sh            first-boot preference seed + Landlock probe + exec dsh (DSH self-initializes the profile)
 compose.yml              default hardening (read_only / cap_drop / no-new-privileges / ports / volumes)
 overlay/webstartup.yml   composition overlay (0.0.0.0 bind — DSH rejects --host 0.0.0.0 — and ~/workspace pins)
-install/                 minimal install manifest (@deepseek-ai/dsh only; frozen lockfile, minimumReleaseAge:0)
+install/                 closure manifest (all family tarballs as file: deps; frozen package-lock.json, engines ^24)
+dist/                    packed closure tarballs (CI job "pack" artifacts; gitignored, required for the build)
+scripts/                 gen-install-manifest.mjs — regenerates install/package.json for a new version
 docs/                    design / security / usage
+RELEASE.md               release checklist (tag = version pin)
 ```
 
 ## Build
 
+The Dockerfile consumes the **packed closure** under `dist/` — it does not pull DSH from
+the registry. CI produces those tarballs by replicating the upstream release pipeline at
+an explicit tag (`.github/workflows/docker-build.yml`, job "pack"); locally you need them too:
+
 ```bash
+# 1. get the closure tarballs into dist/ (CI artifact "dsh-closure", or run the pack
+#    pipeline yourself — see RELEASE.md)
+# 2. regenerate the manifest for the version (once per release):
+node scripts/gen-install-manifest.mjs 0.1.2-alpha.1
+# 3. build (multi-arch publish is CI's job; docker compose build works too)
 docker build -t ghcr.io/hyooeewee/dshc:latest .
-# multi-arch publish (CI also does this; see .github/workflows/docker-build.yml)
 docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/hyooeewee/dshc:latest --push .
 ```
 
-Images publish to `ghcr.io/hyooeewee/dshc` (private package). DSH is a public npm
-closure (frozen lockfile), so builds are reproducible without private registry access.
-On throttled networks set `APT_MIRROR` / `NPM_REGISTRY` in `.env`.
+Images publish to `ghcr.io/hyooeewee/dshc` (private package). The closure is installed
+with npm (the upstream `verify-packed-install` semantics — pnpm cannot satisfy transitive
+`^0.1.x` ranges from `file:` tarballs), so builds are reproducible without private registry
+access. On throttled networks set `APT_MIRROR` / `NPM_REGISTRY` in `.env`.
 
 ## License note
 

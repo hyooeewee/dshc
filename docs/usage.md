@@ -53,11 +53,11 @@ docker compose exec dshc dsh plugin --profile web add <package>
 
 | 钉什么 | 在哪 | 谁来校验 |
 |---|---|---|
-| DSH 版本 | `install/package.json` 的 `dependencies` | 锁文件冻结 |
-| pnpm 版本 | `install/package.json` 的 `packageManager` 字段 | corepack 自动取用 |
+| DSH 版本 | dshc git tag（tag = 版本钉点）；`install/package.json` 的 `dshUpstreamVersion` 供 main 构建读取 | CI job "pack" 的上游 tag 守卫 + verify 冒烟 gate |
+| 闭包 | `install/package.json` 的 `file:` tarball 依赖 + `package-lock.json` | `npm ci` 冻结安装 |
 | Node 大版本 | `install/package.json` 的 `engines.node` + Dockerfile 顶部 `NODE_VERSION` | 安装时不匹配即警告；FROM 标签无法读 manifest，两者需同步改 |
 
-升级 = 改对应字段 → 重新生成锁文件（`cd install && pnpm install --prod --lockfile-only`）→ `docker compose build` → 重起。`minimumReleaseAge:0` 使其不因线上刚发布的版本而失败。
+升级 = 按 [RELEASE.md](RELEASE.md)：重生成清单（`node scripts/gen-install-manifest.mjs <版本>`）→ 重生成锁文件（node 24 容器内 `npm install --package-lock-only --no-audit --no-fund`）→ `docker compose build`（需 `dist/` 闭包在场）→ 重起。
 
 > 从旧版升级到本版：请先 `docker compose down -v` 重置状态卷。两类旧卷都会失效（预期行为）：template/ 三件套时代的卷列着已移除的社区包，新镜像会因解析失败拒绝启动；官方闭包初版（`DSH_HOME=/data`）的卷，数据在 `/data/profiles/` 等顶层路径，而本版 harness home 回归上游默认 `~/.dsh` = `/data/.dsh`——旧数据不会被读到，DSH 会当作全新状态重新初始化。
 

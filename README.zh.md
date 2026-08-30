@@ -2,9 +2,9 @@
 
 > 📖 [English](README.md) · 中文
 
-把 **DSH（DeepSeek Harness）** 安全地跑进 Docker：多架构（linux/amd64 + arm64）、默认硬化、基于自包含且可复现的依赖闭包构建。
+把 **DSH（DeepSeek Harness）** 安全地跑进 Docker：多架构（linux/amd64 + arm64）、默认硬化、基于上游 **GitHub tag 源码**构建——GitHub 发布总是领先 npm，因此镜像以 tag 为准：在该 tag 上打包一次闭包、按架构安装（地图 #12）。
 
-设计决策：[docs/design.md](docs/design.md) · 安全边界：[docs/security.md](docs/security.md) · 运行手册：[docs/usage.md](docs/usage.md) · 由 wayfinder 地图 [hyooeewee/dshc#1](https://github.com/hyooeewee/dshc/issues/1) 驱动。
+设计决策：[docs/design.md](docs/design.md) · 安全边界：[docs/security.md](docs/security.md) · 运行手册：[docs/usage.md](docs/usage.md) · 发布流程：[RELEASE.md](RELEASE.md) · wayfinder 地图：[hyooeewee/dshc#1](https://github.com/hyooeewee/dshc/issues/1)、[#12](https://github.com/hyooeewee/dshc/issues/12)。
 
 ## 快速开始
 
@@ -14,6 +14,9 @@ docker compose up -d --build
 open http://127.0.0.1:3080               # host port via DSHC_PORT in .env (default 3080)
 ```
 
+本地构建需要 `dist/` 下的打包闭包（CI 产出——从 workflow 运行下载 `dsh-closure`
+artifact，或自行跑打包管线；见 [RELEASE.md](RELEASE.md)）。
+
 也可以不建 `.env`，直接 `export DEEPSEEK_API_KEY=sk-...`。DSH 禁止 `DEEPSEEK_*`
 出现在容器侧文件里，无论哪种方式都经宿主侧环境注入。
 
@@ -22,6 +25,7 @@ open http://127.0.0.1:3080               # host port via DSHC_PORT in .env (defa
 | 项 | 决策 | 文档 |
 |---|---|---|
 | 平台 | Linux amd64 + arm64 多架构，bookworm-slim 基础镜像 | [design](docs/design.md) |
+| 版本来源 | 上游 GitHub tag 源码构建（如 `0.1.2-alpha.1`）；dshc 的 git tag 即版本钉点——npm 风格命名、不带 `v` 前缀 | [release](RELEASE.md) |
 | 数据 | 无状态镜像；状态卷挂在上游默认 `~/.dsh`（即 `/home/dsh/.dsh`）；代码只读 | [design](docs/design.md) |
 | 工作区 | 默认隔离在 `~/workspace`，不碰宿主；显式挂载=有意穿透边界 | [security](docs/security.md) |
 | 会话 | 默认 `workspace-write` + GUI 审批；`danger-full-access` 只影响容器内 | [security](docs/security.md) |
@@ -37,23 +41,35 @@ open http://127.0.0.1:3080               # host port via DSHC_PORT in .env (defa
 ## 目录布局
 
 ```
-Dockerfile               multi-stage (locked closure → hardened runtime)
+Dockerfile               multi-stage (packed closure install → hardened runtime)
 entrypoint.sh            first-boot preference seed + Landlock probe + exec dsh (DSH self-initializes the profile)
 compose.yml              default hardening (read_only / cap_drop / no-new-privileges / ports / volumes)
 overlay/webstartup.yml   composition overlay (0.0.0.0 bind — DSH rejects --host 0.0.0.0 — and ~/workspace pins)
-install/                 minimal install manifest (@deepseek-ai/dsh only; frozen lockfile, minimumReleaseAge:0)
+install/                 闭包清单（全部家族 tarball 作 file: 依赖；冻结 package-lock.json，engines ^24）
+dist/                    打包闭包 tarball（CI job "pack" 产物；gitignored，构建必需）
+scripts/                 gen-install-manifest.mjs — 为新版本重生成 install/package.json
 docs/                    design / security / usage
+RELEASE.md               发布 checklist（tag 即版本钉点）
 ```
 
 ## 构建
 
+Dockerfile 消费 `dist/` 下的**打包闭包**——不从 registry 拉 DSH。CI 通过复刻上游发布
+管线在指定 tag 上产出这些 tarball（`.github/workflows/docker-build.yml` 的 job "pack"）；
+本地构建同样需要它们：
+
 ```bash
+# 1. 把闭包 tarball 放进 dist/（CI artifact "dsh-closure"，或自行跑打包管线——见 RELEASE.md）
+# 2. 为版本重生成清单（每次发布一次）：
+node scripts/gen-install-manifest.mjs 0.1.2-alpha.1
+# 3. 构建（多架构发布交给 CI；docker compose build 同样可行）
 docker build -t ghcr.io/hyooeewee/dshc:latest .
-# multi-arch publish (CI also does this; see .github/workflows/docker-build.yml)
 docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/hyooeewee/dshc:latest --push .
 ```
 
-镜像发布到 `ghcr.io/hyooeewee/dshc`（私有包）。DSH 本体是公共 npm 依赖闭包（冻结锁文件），无需私有仓库即可复现构建。网络受限时在 `.env` 设置 `APT_MIRROR` / `NPM_REGISTRY`。
+镜像发布到 `ghcr.io/hyooeewee/dshc`（私有包）。闭包用 npm 安装（上游 `verify-packed-install`
+的语义——pnpm 无法从 `file:` tarball 满足传递 `^0.1.x` 范围），无需私有仓库即可复现构建。
+网络受限时在 `.env` 设置 `APT_MIRROR` / `NPM_REGISTRY`。
 
 ## 许可注意
 
