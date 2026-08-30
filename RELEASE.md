@@ -34,8 +34,8 @@ upstream npm-style version — no `v` prefix, no `dshc` suffix.
 
 5. **One-time semver migration** (historical debt): the old image was labeled
    `v0.1.1` but shipped `0.1.1-rc.2` (a pre-release `< 0.1.1`). Alias
-   `0.1.1-rc.2` on the old ghcr/docker.io image and let `latest` follow the new
-   source build.
+   `0.1.1-rc.2` on the old ghcr image and let `latest` follow the new source
+   build. (docker.io/godotttt is discontinued — deleted.)
 
 ## Notes
 
