@@ -72,10 +72,15 @@ docker build -t ghcr.io/hyooeewee/dshc:latest .
 docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/hyooeewee/dshc:latest --push .
 ```
 
-Images publish to `ghcr.io/hyooeewee/dshc` (private package). The closure is installed
-with npm (the upstream `verify-packed-install` semantics — pnpm cannot satisfy transitive
-`^0.1.x` ranges from `file:` tarballs), so builds are reproducible without private registry
+Images publish to `ghcr.io/hyooeewee/dshc` (private package) and `godotttt/dshc` (Docker
+Hub; its overview is synced from this README). The closure is installed with npm (the
+upstream `verify-packed-install` semantics — pnpm cannot satisfy transitive `^0.1.x`
+ranges from `file:` tarballs), so builds are reproducible without private registry
 access. On throttled networks set `APT_MIRROR` / `NPM_REGISTRY` in `.env`.
+
+Releases are tag-driven: tag pushes make CI pack the upstream `dsh-v<version>` and
+install exactly those artifacts — the committed `install/` manifest needs no update
+for a tag build (it only tracks `latest` on main and local dev builds).
 
 ## License note
 

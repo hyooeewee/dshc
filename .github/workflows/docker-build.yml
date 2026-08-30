@@ -1,14 +1,16 @@
 name: build-dshc
 
-# dshc multi-arch image build (linux/amd64 + linux/arm64 -> ghcr.io/hyooeewee/dshc)
-# from the upstream GitHub tag source (map #12):
+# dshc multi-arch image build (linux/amd64 + linux/arm64 -> ghcr.io/hyooeewee/dshc
+# + docker.io/godotttt/dshc) from the upstream GitHub tag source (map #12):
 #   job "pack"  replicates the upstream release pipeline on a native amd64
 #               runner and ships the packed closure as CI artifacts;
-#   job "build" runs the multi-arch docker build, which only installs that
+#   job "build" regenerates the closure manifest + lock from THOSE artifacts,
+#               then runs the multi-arch docker build, which only installs the
 #               closure — platform-native deps resolve from the registry per
 #               architecture (no full build under QEMU).
-# Versioning: the dshc git tag IS the version pin (upstream npm-style, no "v");
-# on main pushes the version comes from the committed install/ package.json.
+# Tag = release: `git tag <version> && git push origin <version>` packs the
+# upstream dsh-v<version> and ships the image <version> with no pre-staged
+# install/ manifest (the committed one only serves main/latest + local dev).
 on:
   push:
     branches: [main]
@@ -133,11 +135,38 @@ jobs:
           [ "$(ls dist/npm/*.tgz 2>/dev/null | wc -l)" -ge 1 ] \
             || { echo "::error::no closure tarballs under dist/npm"; exit 1; }
 
+      # Tag = release: the closure manifest + frozen lock are regenerated from
+      # the artifacts packed by this very run, so no install/ update is needed
+      # before tagging a new upstream version (map #12 / ticket #16).
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Regenerate closure manifest + lock from the artifacts
+        run: |
+          node scripts/gen-install-manifest.mjs "${{ needs.pack.outputs.dsh_tag }}"
+          cd install && npm install --package-lock-only --no-audit --no-fund
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v4
+
+      - name: Get Secrets
+        uses: bitwarden/sm-action@v2
+        with:
+          access_token: ${{ secrets.BW_ACCESS_TOKEN }}
+          secrets: |
+            0aebfcde-7155-47c4-ba38-b4b40019e9d2 > DOCKER_USERNAME
+            d501324f-13e1-4c16-817b-b4b4001aee09 > DOCKER_PAT
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_PAT }}
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v4
@@ -152,6 +181,7 @@ jobs:
         with:
           images: |
             ghcr.io/hyooeewee/dshc
+            godotttt/dshc
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{raw}} # keep raw tag name (map #12: no "v" prefix)
@@ -168,3 +198,15 @@ jobs:
             dsh.upstream.version=${{ needs.pack.outputs.dsh_tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Docker Hub has no README auto-sync for plain pushes; publish the repo
+      # overview from README.md (short description + full markdown overview).
+      - name: Update Docker Hub description from README
+        run: |
+          TOKEN="$(curl -fsS -H 'Content-Type: application/json' \
+            -d "{\"username\":\"${DOCKER_USERNAME}\",\"password\":\"${DOCKER_PAT}\"}" \
+            https://hub.docker.com/v2/users/login | jq -r .token)"
+          BODY="$(jq -Rs --arg desc 'DeepSeek Harness Container — hardened, multi-arch, built from the upstream GitHub tag source' \
+            '{description: $desc, full_description: .}' README.md)"
+          curl -fsS -X PATCH -H "Authorization: JWT ${TOKEN}" -H 'Content-Type: application/json' \
+            -d "$BODY" https://hub.docker.com/v2/repositories/godotttt/dshc/ | jq -r '.name // empty'

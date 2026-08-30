@@ -67,9 +67,13 @@ docker build -t ghcr.io/hyooeewee/dshc:latest .
 docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/hyooeewee/dshc:latest --push .
 ```
 
-镜像发布到 `ghcr.io/hyooeewee/dshc`（私有包）。闭包用 npm 安装（上游 `verify-packed-install`
-的语义——pnpm 无法从 `file:` tarball 满足传递 `^0.1.x` 范围），无需私有仓库即可复现构建。
-网络受限时在 `.env` 设置 `APT_MIRROR` / `NPM_REGISTRY`。
+镜像发布到 `ghcr.io/hyooeewee/dshc`（私有包）与 `godotttt/dshc`（Docker Hub，其简介
+由本 README 同步）。闭包用 npm 安装（上游 `verify-packed-install` 的语义——pnpm 无法
+从 `file:` tarball 满足传递 `^0.1.x` 范围），无需私有仓库即可复现构建。网络受限时在
+`.env` 设置 `APT_MIRROR` / `NPM_REGISTRY`。
+
+发布是 tag 驱动的：tag 推送会让 CI 打包上游 `dsh-v<version>` 并只安装这批 artifacts——
+tag 构建无需预改已提交的 `install/` 清单（它只负责 main 的 `latest` 与本地开发构建）。
 
 ## 许可注意
 

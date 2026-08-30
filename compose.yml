@@ -5,7 +5,7 @@
 
 services:
   dshc:
-    image: ghcr.io/hyooeewee/dshc:latest
+    image: godotttt/dshc:latest
     container_name: dshc
     hostname: dshc
     restart: unless-stopped
