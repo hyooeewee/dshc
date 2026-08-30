@@ -124,11 +124,14 @@ jobs:
       - name: Layout tarballs for the Dockerfile
         run: |
           mkdir -p dist
-          mv artifacts/upstream/dist/npm dist/npm
-          mv artifacts/upstream/dist/npm-vendor dist/npm-vendor
-          mv artifacts/upstream/dist/npm-landlock dist/npm-landlock
+          for d in npm npm-vendor npm-landlock; do
+            src="$(find artifacts -type d -name "$d" | head -1)"
+            [ -n "$src" ] || { echo "::error::closure dir '$d' missing from artifact"; exit 1; }
+            mv "$src" "dist/$d"
+          done
           rm -rf artifacts
-          [ "$(ls dist/npm/*.tgz 2>/dev/null | wc -l)" -ge 1 ]
+          [ "$(ls dist/npm/*.tgz 2>/dev/null | wc -l)" -ge 1 ] \
+            || { echo "::error::no closure tarballs under dist/npm"; exit 1; }
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
