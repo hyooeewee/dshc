@@ -6,9 +6,10 @@ upstream npm-style version — no `v` prefix, no `dshc` suffix.
 
 ## Steps
 
-1. **Pick the upstream release**: a git tag `dsh-<version>` in
-   `github.com/deepseek-ai/deepseek-harness` (GitHub releases lead npm publish
-   by design; source builds track the tag, not the registry).
+1. **Pick the upstream release**: a git tag `dsh-v<version>` in
+   `github.com/deepseek-ai/deepseek-harness` (upstream tag naming is `dsh-v`
+   + npm-style version; GitHub releases lead npm publish by design — source
+   builds track the tag, not the registry).
 
 2. **Re-pin the closure for `<version>`**:
    - put the packed tarballs at `dist/{npm,npm-vendor,npm-landlock}` — CI job

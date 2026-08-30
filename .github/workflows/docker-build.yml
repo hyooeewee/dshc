@@ -54,8 +54,8 @@ jobs:
         env:
           DSH_TAG: ${{ steps.resolve.outputs.dsh_tag }}
         run: |
-          git ls-remote "https://github.com/${{ env.UPSTREAM_REPO }}.git" "refs/tags/dsh-${DSH_TAG}" | grep -q . \
-            || { echo "::error::upstream tag dsh-${DSH_TAG} not found"; exit 1; }
+          git ls-remote "https://github.com/${{ env.UPSTREAM_REPO }}.git" "refs/tags/dsh-v${DSH_TAG}" | grep -q . \
+            || { echo "::error::upstream tag dsh-v${DSH_TAG} not found"; exit 1; }
 
       - name: Set up Node.js (corepack provides pnpm@11.7.0)
         uses: actions/setup-node@v4
@@ -66,7 +66,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ env.UPSTREAM_REPO }}
-          ref: refs/tags/dsh-${{ steps.resolve.outputs.dsh_tag }}
+          # upstream git tag naming: dsh-v<version> (the "v" is upstream's own)
+          ref: refs/tags/dsh-v${{ steps.resolve.outputs.dsh_tag }}
           fetch-depth: 1
           persist-credentials: false
           path: upstream
