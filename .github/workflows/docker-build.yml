@@ -10,9 +10,10 @@ name: build-dshc
 #               architecture (no full build under QEMU).
 # Actions use floating majors by policy (auto-receive upstream fixes);
 # bitwarden/sm-action is pinned to v3.0.1 because it publishes no floating
-# v3 tag. A moving floating tag can trip the runner's digest check (observed
-# digest-mismatch on docker/metadata-action@v6) — accept the risk, or pin an
-# exact version when it bites.
+# v3 tag. metadata-action is pinned to v6.1.0: both the v6 and v6.2.0 tags
+# point at SHA dc802804, whose download fails the runner's digest check in
+# every run (digest-mismatch) — v6.1.0 is the last healthy version; re-float
+# the pin when upstream/GitHub repairs the tag.
 # Tag = release: `git tag <version> && git push origin <version>` packs the
 # upstream dsh-v<version> and ships <version> + `latest`; nothing under
 # install/ is committed (the manifest + lock are regenerated from that run's
@@ -186,7 +187,7 @@ jobs:
 
       - name: Docker metadata
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@v6.1.0
         with:
           images: |
             ghcr.io/hyooeewee/dshc
