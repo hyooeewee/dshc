@@ -25,16 +25,22 @@ const scan = (subdir) =>
     ? readdirSync(join(dist, subdir)).filter((f) => f.endsWith('.tgz')).sort()
     : [];
 
-// Native/platform registry deps pinned to the versions the upstream tag's
-// lockfile tested (research #14 / map #12). Reproducibility of the native
-// surface matters: registry-latest may differ (observed koffi 3.1.6 vs 3.1.1).
-// Pure-JS minors (tsx/esbuild/protobufjs drift) stay within-range by design.
+// Registry deps pinned to the versions the upstream tag's lockfile tested
+// (research #14 / map #12): native/platform surface (koffi, require-builtin)
+// AND the toolchain (tsx/esbuild + esbuild platform binaries) drift against
+// registry-latest otherwise (observed koffi 3.1.6 vs 3.1.1, esbuild 0.28.2 vs
+// 0.28.1, tsx 4.23.13 vs 4.22.4). Everything else resolves within the ranges
+// the upstream lockfile allowed; the exact match is enforced by npm overrides.
 const UPSTREAM_PINS = {
   'koffi': '3.1.1',
   '@koromix/koffi-linux-x64': '3.1.1',
   '@koromix/koffi-linux-arm64': '3.1.1',
   'node-addon-require-builtin': '0.1.4',
   'protobufjs': '7.6.4',
+  'tsx': '4.22.4',
+  'esbuild': '0.28.1',
+  '@esbuild/linux-x64': '0.28.1',
+  '@esbuild/linux-arm64': '0.28.1',
 };
 
 let version = process.argv[2];

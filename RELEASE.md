@@ -52,8 +52,15 @@ The old image was labeled `v0.1.1` but shipped `0.1.1-rc.2` (a pre-release
   install on the per-architecture image build; everything else is
   platform-neutral pure JS (prototype #15).
 - Because the lock is regenerated per run, the npm-ci image layer rebuilds on
-  every release (fresh install, not cached) — expected; registry-dependency
-  resolution stays pinned by the overrides in `gen-install-manifest.mjs`.
+  every release (fresh install, not cached) — expected.
+- Version drift against registry-latest is closed by the overrides in
+  `gen-install-manifest.mjs` (`UPSTREAM_PINS`), pinned to the upstream tag's
+  lockfile: natives koffi/@koromix-koffi-linux-\* 3.1.1, node-addon-require-builtin
+  0.1.4; toolchain tsx 4.22.4, esbuild + @esbuild/linux-\* 0.28.1; schemastery
+  neighbor protobufjs 7.6.4. Everything else resolves within the ranges upstream
+  allowed (npm semantics, like the upstream verify gate). Note: upstream patches
+  node-pty@1.2.0-beta.15 (same version we resolve); the patch is not applied by
+  npm and only touches darwin spawn-helper — inert on the linux image.
 - Main-branch (`latest`) builds resolve the version from
   `install/package.json`'s `dshUpstreamVersion`; guard, pipeline and smoke run
   the same way.
