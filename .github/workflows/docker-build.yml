@@ -8,6 +8,11 @@ name: build-dshc
 #               then runs the multi-arch docker build, which only installs the
 #               closure — platform-native deps resolve from the registry per
 #               architecture (no full build under QEMU).
+# Actions use floating majors by policy (auto-receive upstream fixes);
+# bitwarden/sm-action is pinned to v3.0.1 because it publishes no floating
+# v3 tag. A moving floating tag can trip the runner's digest check (observed
+# digest-mismatch on docker/metadata-action@v6) — accept the risk, or pin an
+# exact version when it bites.
 # Tag = release: `git tag <version> && git push origin <version>` packs the
 # upstream dsh-v<version> and ships <version> + `latest`; nothing under
 # install/ is committed (the manifest + lock are regenerated from that run's
