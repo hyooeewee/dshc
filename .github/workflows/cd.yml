@@ -1,27 +1,9 @@
-name: build-dshc
+name: Continuous Delivery
 
-# dshc multi-arch image build (linux/amd64 + linux/arm64 -> ghcr.io/hyooeewee/dshc
-# + docker.io/godotttt/dshc) from the upstream GitHub tag source (map #12):
-#   job "pack"  replicates the upstream release pipeline on a native amd64
-#               runner and ships the packed closure as CI artifacts;
-#   job "build" regenerates the closure manifest + lock from THOSE artifacts,
-#               then runs the multi-arch docker build, which only installs the
-#               closure — platform-native deps resolve from the registry per
-#               architecture (no full build under QEMU).
-# Actions use floating majors by policy (auto-receive upstream fixes);
-# bitwarden/sm-action is pinned to v3.0.1 because it publishes no floating
-# v3 tag. metadata-action is pinned to v6.1.0: both the v6 and v6.2.0 tags
-# point at SHA dc802804, whose download fails the runner's digest check in
-# every run (digest-mismatch) — v6.1.0 is the last healthy version; re-float
-# the pin when upstream/GitHub repairs the tag.
-# Tag = release: `git tag <version> && git push origin <version>` packs the
-# upstream dsh-v<version> and ships <version> + `latest`; nothing under
-# install/ is committed (the manifest + lock are regenerated from that run's
-# artifacts). Main pushes build `latest` again from the newest release tag.
 on:
   push:
     branches: [main]
-    tags: ["[0-9]*"]
+    tags: ["*"]
   workflow_dispatch:
 
 concurrency:
@@ -42,9 +24,6 @@ jobs:
     outputs:
       dsh_tag: ${{ steps.resolve.outputs.dsh_tag }}
     steps:
-      # Only needed on main pushes / dispatch (version = newest release tag);
-      # tag pushes carry the version in the ref name. Tags are required for the
-      # resolution, fetch them all.
       - name: Checkout dshc
         if: github.ref_type != 'tag'
         uses: actions/checkout@v7
@@ -57,7 +36,7 @@ jobs:
           if [ "${{ github.ref_type }}" = "tag" ]; then
             tag="${{ github.ref_name }}"
           else
-            tag="$(git tag --list '[0-9]*' --sort=-v:refname | head -1)"
+            tag="$(git tag --list --sort=-v:refname | head -1)"
             [ -n "$tag" ] || { echo "::error::no release tag yet — create one (git tag <version> && git push origin <version>)"; exit 1; }
           fi
           echo "dsh_tag=$tag" >> "$GITHUB_OUTPUT"
@@ -66,8 +45,8 @@ jobs:
         env:
           DSH_TAG: ${{ steps.resolve.outputs.dsh_tag }}
         run: |
-          git ls-remote "https://github.com/${{ env.UPSTREAM_REPO }}.git" "refs/tags/dsh-v${DSH_TAG}" | grep -q . \
-            || { echo "::error::upstream tag dsh-v${DSH_TAG} not found"; exit 1; }
+          git ls-remote "https://github.com/${{ env.UPSTREAM_REPO }}.git" "refs/tags/dsh-${DSH_TAG}" | grep -q . \
+            || { echo "::error::upstream tag dsh-${DSH_TAG} not found"; exit 1; }
 
       - name: Set up Node.js (corepack provides pnpm@11.7.0)
         uses: actions/setup-node@v7
@@ -78,7 +57,6 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: ${{ env.UPSTREAM_REPO }}
-          # upstream git tag naming: dsh-v<version> (the "v" is upstream's own)
           ref: refs/tags/dsh-v${{ steps.resolve.outputs.dsh_tag }}
           fetch-depth: 1
           persist-credentials: false
@@ -145,13 +123,11 @@ jobs:
           [ "$(ls dist/npm/*.tgz 2>/dev/null | wc -l)" -ge 1 ] \
             || { echo "::error::no closure tarballs under dist/npm"; exit 1; }
 
-      # Tag = release: the closure manifest + frozen lock are regenerated from
-      # the artifacts packed by this very run, so no install/ update is needed
-      # before tagging a new upstream version (map #12 / ticket #16).
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: 24
+          cache: 
 
       - name: Regenerate closure manifest + lock from the artifacts
         run: |
@@ -193,13 +169,7 @@ jobs:
             ghcr.io/hyooeewee/dshc
             godotttt/dshc
           tags: |
-            # v6.1.0 expression set is only branch/tag/sha/base_ref/commit_date/
-            # is_default_branch/is_not_default_branch/date — no is_tag, and `||`
-            # is rejected. This workflow fires on main pushes and [0-9]* tag
-            # pushes only, so the two raw lines are mutually exclusive:
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=latest,enable={{is_not_default_branch}}
-            type=semver,pattern={{raw}}
+            type=semver,pattern={{version}}
 
       - name: Build and push
         uses: docker/build-push-action@v7
@@ -214,32 +184,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # GHCR keeps untagged versions forever (they hold blobs and count against
-      # storage) — prune the orphans left by tag moves / latest re-stamps right
-      # after the push. GITHUB_TOKEN may lack delete:packages; degrade to a
-      # warning then (run scripts/clean-ghcr.sh manually).
-      - name: Prune untagged ghcr versions
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api --paginate -H "Accept: application/vnd.github+json" \
-            "/user/packages/container/dshc/versions" > /tmp/v.json || exit 0
-          for id in $(jq -r '.[] | select((.metadata.container.tags // []) | length == 0) | .id' /tmp/v.json); do
-            if out="$(gh api -X DELETE -H "Accept: application/vnd.github+json" "/user/packages/container/dshc/versions/$id" 2>&1)"; then
-              echo "pruned untagged version $id"
-            else
-              echo "::warning::cannot delete untagged $id ($out) — run scripts/clean-ghcr.sh"
-            fi
-          done
-
-      # Docker Hub has no README auto-sync for plain pushes; publish the repo
-      # overview from README.md (short description + full markdown overview).
-      - name: Update Docker Hub description from README
-        run: |
-          TOKEN="$(curl -fsS -H 'Content-Type: application/json' \
-            -d "{\"username\":\"${DOCKER_USERNAME}\",\"password\":\"${DOCKER_PAT}\"}" \
-            https://hub.docker.com/v2/users/login | jq -r .token)"
-          BODY="$(jq -Rs --arg desc 'DeepSeek Harness Container — hardened, multi-arch, built from the upstream GitHub tag source' \
-            '{description: $desc, full_description: .}' README.md)"
-          curl -fsS -X PATCH -H "Authorization: JWT ${TOKEN}" -H 'Content-Type: application/json' \
-            -d "$BODY" https://hub.docker.com/v2/repositories/godotttt/dshc/ | jq -r '.name // empty'
+      - name: Update Docker Hub description
+        uses: peter-evans/dockerhub-description@v5
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PAT }}
+          repository: godotttt/dshc
+          short-description: ${{ github.event.repository.description }}
+          readme-filepath: ./README.md
+          enable-url-completion: true
