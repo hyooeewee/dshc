@@ -57,7 +57,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: ${{ env.UPSTREAM_REPO }}
-          ref: refs/tags/dsh-v${{ steps.resolve.outputs.dsh_tag }}
+          ref: refs/tags/dsh-${{ steps.resolve.outputs.dsh_tag }}
           fetch-depth: 1
           persist-credentials: false
           path: upstream
