@@ -193,10 +193,12 @@ jobs:
             ghcr.io/hyooeewee/dshc
             godotttt/dshc
           tags: |
-            # two raw lines, mutually exclusive runs (branch vs tag push): the
-            # evaluator (v6.1.0) rejects boolean operators like `||`
+            # v6.1.0 expression set is only branch/tag/sha/base_ref/commit_date/
+            # is_default_branch/is_not_default_branch/date — no is_tag, and `||`
+            # is rejected. This workflow fires on main pushes and [0-9]* tag
+            # pushes only, so the two raw lines are mutually exclusive:
             type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=latest,enable={{is_tag}}
+            type=raw,value=latest,enable={{is_not_default_branch}}
             type=semver,pattern={{raw}}
 
       - name: Build and push
