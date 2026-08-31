@@ -1,12 +1,14 @@
 #!/usr/bin/env node
-// Regenerates install/package.json from the packed closure tarballs under
-// dist/ (CI artifact layout: dist/npm, dist/npm-vendor, dist/npm-landlock).
-// Usage: node scripts/gen-install-manifest.mjs [version]
+// Regenerates install/package.json + package-lock.json from the packed closure
+// tarballs under dist/ (CI artifact layout: dist/npm, dist/npm-vendor,
+// dist/npm-landlock). Both files are build products: nothing under install/ is
+// committed (dshc/AGENTS + .gitignore); the release pipeline writes them per
+// build. Usage: node scripts/gen-install-manifest.mjs [version]
 // The version defaults to the @deepseek-ai/dsh tarball in dist/npm.
 // Decision record: wayfinder map #12, ticket #16 (git tag is the version pin;
-// install/package.json carries the upstream version for main-branch builds).
+// `latest` and local dev builds read the newest release tag from git).
 import { execSync } from 'node:child_process';
-import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -57,8 +59,18 @@ for (const subdir of ['npm', 'npm-vendor', 'npm-landlock']) {
     dependencies[name] = `file:../dist/${subdir}/${file}`;
   }
 }
+// UI peer roots: family client packages declare react on ^18.x and react-dom's
+// peer react@^18.3.1 must be satisfied by a root dep for npm's cold resolution
+// (observed react@undefined ERESOLVE on a fresh install/ without a lock).
+dependencies['react'] = '^18.2.0';
+dependencies['react-dom'] = '^18.2.0';
 
-const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+mkdirSync(dirname(manifestPath), { recursive: true });
+// Preserve hand-tuned fields if package.json exists, else start from a minimal
+// base: nothing under install/ is committed, so a fresh checkout has no file.
+const manifest = existsSync(manifestPath)
+  ? JSON.parse(readFileSync(manifestPath, 'utf8'))
+  : { name: 'dsh-closure', version: '0.0.0', private: true };
 manifest.packageManager = 'pnpm@11.7.0'; // upstream release baseline
 manifest.engines = { node: '^24.0.0' }; // runtime base image is node 24
 manifest.dshUpstreamVersion = version;
@@ -67,10 +79,11 @@ manifest.overrides = UPSTREAM_PINS;
 writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 
 // npm 11 records a sha512 integrity for each file: tarball at lock generation.
-// Packed tarballs are re-generated per release (gzip mtimes differ between runs),
-// so a byte-level integrity on file: deps would make the committed lock fail
-// against freshly packed artifacts (EINTEGRITY). Strip it — the specifier keeps
-// pinning the exact path/version, registry deps keep their own integrity.
+// Tarballs are re-generated per release (gzip mtimes differ between runs) and
+// install/ is a per-build product, so a stale lock with byte-level integrity
+// would fail npm ci with EINTEGRITY (e.g. rebuilding locally after downloading
+// a newer artifact). Strip it — the specifier keeps pinning path/version,
+// registry deps keep their own integrity.
 const lockPath = join(root, 'install', 'package-lock.json');
 if (existsSync(lockPath)) {
   const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
@@ -89,4 +102,4 @@ if (existsSync(lockPath)) {
 
 console.log(`manifest: ${manifestPath}`);
 console.log(`dshUpstreamVersion: ${version}`);
-console.log(`dependencies: ${Object.keys(dependencies).length} file: tarballs`);
+console.log(`dependencies: ${Object.keys(dependencies).length} (${Object.keys(dependencies).length - 2} file: tarballs + react + react-dom)`);

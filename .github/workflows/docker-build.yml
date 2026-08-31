@@ -9,8 +9,9 @@ name: build-dshc
 #               closure — platform-native deps resolve from the registry per
 #               architecture (no full build under QEMU).
 # Tag = release: `git tag <version> && git push origin <version>` packs the
-# upstream dsh-v<version> and ships the image <version> with no pre-staged
-# install/ manifest (the committed one only serves main/latest + local dev).
+# upstream dsh-v<version> and ships <version> + `latest`; nothing under
+# install/ is committed (the manifest + lock are regenerated from that run's
+# artifacts). Main pushes build `latest` again from the newest release tag.
 on:
   push:
     branches: [main]
@@ -35,11 +36,14 @@ jobs:
     outputs:
       dsh_tag: ${{ steps.resolve.outputs.dsh_tag }}
     steps:
-      # Only needed on main pushes (version read from the committed manifest);
-      # tag pushes carry the version in the ref name.
+      # Only needed on main pushes / dispatch (version = newest release tag);
+      # tag pushes carry the version in the ref name. Tags are required for the
+      # resolution, fetch them all.
       - name: Checkout dshc
         if: github.ref_type != 'tag'
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Resolve upstream version
         id: resolve
@@ -47,8 +51,8 @@ jobs:
           if [ "${{ github.ref_type }}" = "tag" ]; then
             tag="${{ github.ref_name }}"
           else
-            tag="$(jq -r .dshUpstreamVersion install/package.json)"
-            [ -n "$tag" ] && [ "$tag" != "null" ]
+            tag="$(git tag --list '[0-9]*' --sort=-v:refname | head -1)"
+            [ -n "$tag" ] || { echo "::error::no release tag yet — create one (git tag <version> && git push origin <version>)"; exit 1; }
           fi
           echo "dsh_tag=$tag" >> "$GITHUB_OUTPUT"
 
@@ -183,7 +187,7 @@ jobs:
             ghcr.io/hyooeewee/dshc
             godotttt/dshc
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable={{is_default_branch || is_tag}}
             type=semver,pattern={{raw}}
 
       - name: Build and push

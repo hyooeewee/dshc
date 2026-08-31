@@ -5,3 +5,6 @@ node_modules/
 dist/
 # research one-off artifacts (kept in git history/research branches; untracked on main)
 research/
+
+# closure manifest + lock are per-build products (RELEASE.md)
+install/

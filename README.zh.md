@@ -45,9 +45,9 @@ Dockerfile               multi-stage (packed closure install → hardened runtim
 entrypoint.sh            first-boot preference seed + Landlock probe + exec dsh (DSH self-initializes the profile)
 compose.yml              default hardening (read_only / cap_drop / no-new-privileges / ports / volumes)
 overlay/webstartup.yml   composition overlay (0.0.0.0 bind — DSH rejects --host 0.0.0.0 — and ~/workspace pins)
-install/                 闭包清单（全部家族 tarball 作 file: 依赖；冻结 package-lock.json，engines ^24）
+install/                 生成的闭包清单 + 锁（gitignored；每次构建的产物）
 dist/                    打包闭包 tarball（CI job "pack" 产物；gitignored，构建必需）
-scripts/                 gen-install-manifest.mjs — 为新版本重生成 install/package.json
+scripts/                 gen-install-manifest.mjs — 为某版本生成 install/
 docs/                    design / security / usage
 RELEASE.md               发布 checklist（tag 即版本钉点）
 ```
@@ -60,8 +60,9 @@ Dockerfile 消费 `dist/` 下的**打包闭包**——不从 registry 拉 DSH。
 
 ```bash
 # 1. 把闭包 tarball 放进 dist/（CI artifact "dsh-closure"，或自行跑打包管线——见 RELEASE.md）
-# 2. 为版本重生成清单（每次发布一次）：
+# 2. 生成 install/（清单 + 冻结锁；node 24）：
 node scripts/gen-install-manifest.mjs 0.1.2-alpha.1
+cd install && npm install --package-lock-only --no-audit --no-fund
 # 3. 构建（多架构发布交给 CI；docker compose build 同样可行）
 docker build -t ghcr.io/hyooeewee/dshc:latest .
 docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/hyooeewee/dshc:latest --push .
@@ -72,8 +73,9 @@ docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/hyooeewee/dshc
 从 `file:` tarball 满足传递 `^0.1.x` 范围），无需私有仓库即可复现构建。网络受限时在
 `.env` 设置 `APT_MIRROR` / `NPM_REGISTRY`。
 
-发布是 tag 驱动的：tag 推送会让 CI 打包上游 `dsh-v<version>` 并只安装这批 artifacts——
-tag 构建无需预改已提交的 `install/` 清单（它只负责 main 的 `latest` 与本地开发构建）。
+发布是 tag 驱动的：tag 推送会让 CI 打包上游 `dsh-v<version>` 并只安装这批 artifacts，
+发布 `<version>` **与** `latest`（latest = 最新发布 tag；main 推送按最新 tag 重建
+`latest`）。`install/` 的清单与锁是每次构建的产物，从不提交。
 
 ## 许可注意
 

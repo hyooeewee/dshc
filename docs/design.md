@@ -10,9 +10,9 @@ Source-build 迁移（地图 [#12](https://github.com/hyooeewee/dshc/issues/12)�
    source*, not a registry install. CI job "pack" replicates the upstream
    release pipeline at an explicit GitHub tag (`build:official` → `release:pack`;
    pure-JS platform-neutral tarballs, verified in prototype #15); the image
-   then only installs that closure: `install/package.json` pins every family
-   tarball as a `file:` dependency and `package-lock.json` freezes the resolved
-   tree. Installer uses **npm** (the upstream `verify-packed-install` semantics —
+   then only installs that closure: the in-context `install/package.json` (a
+   per-build product, never committed) pins every family tarball as a `file:`
+   dependency and `package-lock.json` freezes the resolved tree. Installer uses **npm** (the upstream `verify-packed-install` semantics —
    pnpm cannot satisfy transitive `^0.1.x` ranges from `file:` tarballs).
    - The manifest is self-consistent: `engines.node ^24` matches the runtime
      base image; `dshUpstreamVersion` carries the pinned upstream version
@@ -49,8 +49,10 @@ DSH CLI 规范形为 **`dsh --profile web`**；`dsh web` 是其硬编码等价�
   pack → verify smoke gate) and uploads the closure as artifacts; job "build"
   runs the multi-arch buildx build, which only installs the closure (arm64
   skips the full build under QEMU).
-- The dshc git tag IS the version (npm-style, no `v` prefix); main pushes read
-  `dshUpstreamVersion` from `install/package.json`. Full steps: `RELEASE.md`.
+- The dshc git tag IS the version (npm-style, no `v` prefix); a tag push ships
+  `<version>` + `latest` (newest release tag). `install/` (closure manifest +
+  frozen lock) is a per-build product regenerated from each run's artifacts and
+  is never committed. Full steps: `RELEASE.md`.
 - 冒烟（#9）：GUI 可达、bash 工具在 Landlock 沙箱内、容器内 danger-full-access 不穿透宿主、重启卷持久、`dsh --profile headless` 可用。
 
 ## 范围之外（不实现）

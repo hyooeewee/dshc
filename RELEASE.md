@@ -11,29 +11,29 @@ upstream npm-style version — no `v` prefix, no `dshc` suffix.
 - job **pack** — guard (`dsh-v<version>` must exist upstream) → shallow clone →
   `pnpm install --frozen-lockfile` → `build:official` → `release:pack`
   (dsh/vendor/landlock) → `verify-packed-install` smoke gate → artifacts;
-- job **build** — regenerates `install/package.json` + `package-lock.json`
-  **from those artifacts** (`gen-install-manifest.mjs` + `npm install
-  --package-lock-only`), then builds the multi-arch image that installs exactly
-  that closure, pushing `<version>` to ghcr.io + Docker Hub.
+- job **build** — writes `install/package.json` + `package-lock.json` **from
+  those artifacts** (`gen-install-manifest.mjs <version>` + `npm install
+  --package-lock-only`), builds the multi-arch image that installs exactly that
+  closure, pushing `<version>` **and `latest`** to ghcr.io + Docker Hub.
 
-No pre-staged `install/` update is needed for a tag build — the manifest and
-lock are recreated per run from the packed tarballs, so "give a version → ship".
+Nothing under `install/` is committed (`install/` is gitignored, `.gitignore`):
+the manifest and lock are per-build products recreated from each run's packed
+tarballs. Tag = release, `latest` = newest release tag.
 
-## Recommended: keep `latest`/main in sync (optional)
+## Local / main-branch builds
 
-After a successful tag release, refresh the committed `install/` so main's
-`latest` and local `docker compose build` track the new version:
+Main pushes and `workflow_dispatch` resolve the version from the **newest
+release tag** (`git tag --list '[0-9]*' --sort=-v:refname`); a repo with no
+release tag yet fails the run with a clear message. Building locally:
 
-1. get the tarballs: download the `dsh-closure` artifact of that run (or run
-   the pack pipeline yourself) → expand to `dist/{npm,npm-vendor,npm-landlock}`;
-2. `node scripts/gen-install-manifest.mjs <version>` — rewrites
+1. get the closure tarballs into `dist/{npm,npm-vendor,npm-landlock}` (CI
+   artifact "dsh-closure", or run the pack pipeline yourself);
+2. `node scripts/gen-install-manifest.mjs <version>` — writes
    `install/package.json` (251 `file:` deps, `engines` `^24`,
-   `dshUpstreamVersion`, native-surface overrides) and strips `file:` integrity
-   from `install/package-lock.json` (packed tarball bytes are not deterministic
-   across runs);
-3. regenerate the frozen lock: in node 24,
-   `cd install && npm install --package-lock-only --no-audit --no-fund`;
-4. sanity `docker build .` (needs `dist/` present), then commit.
+   `dshUpstreamVersion`, overrides; strips `file:` integrity from the lock);
+3. `cd install && npm install --package-lock-only --no-audit --no-fund`
+   (node 24) — regenerates the frozen lock;
+4. `docker build .` or `docker compose up -d --build`.
 
 ## One-time semver migration (historical debt)
 
@@ -47,7 +47,10 @@ The old image was labeled `v0.1.1` but shipped `0.1.1-rc.2` (a pre-release
   `dist/`; the in-context `install/` pins their `file:` specifiers + lock.
 - The closure install uses **npm**, not pnpm — same as the upstream
   `verify-packed-install`: pnpm cannot satisfy transitive `^0.1.x` ranges from
-  `file:` tarballs (observed 404 on `@deepseek-ai/dsh-sdk-app`).
+  `file:` tarballs (observed 404 on `@deepseek-ai/dsh-sdk-app`). The generator
+  adds `react`/`react-dom` (^18.2.0) as explicit UI peer roots — npm's cold
+  resolution needs react present to satisfy react-dom's peer (observed
+  `react@undefined` ERESOLVE without them).
 - Platform-native modules (node-pty via node-gyp, koffi via cmake) compile at
   install on the per-architecture image build; everything else is
   platform-neutral pure JS (prototype #15).
@@ -61,8 +64,5 @@ The old image was labeled `v0.1.1` but shipped `0.1.1-rc.2` (a pre-release
   allowed (npm semantics, like the upstream verify gate). Note: upstream patches
   node-pty@1.2.0-beta.15 (same version we resolve); the patch is not applied by
   npm and only touches darwin spawn-helper — inert on the linux image.
-- Main-branch (`latest`) builds resolve the version from
-  `install/package.json`'s `dshUpstreamVersion`; guard, pipeline and smoke run
-  the same way.
 - Docker Hub overview is synced from `README.md` by the CI "Update Docker Hub
   description" step (plain `docker push` does not sync descriptions).

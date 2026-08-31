@@ -17,8 +17,9 @@ docker compose up -d --build
 open http://127.0.0.1:3080               # host port via DSHC_PORT in .env (default 3080)
 ```
 
-Local builds need the packed closure under `dist/` (CI produces it — download the
-`dsh-closure` artifact from a workflow run, or run the pack pipeline yourself; see
+Local builds need the packed closure under `dist/` **and** a generated `install/`
+(CI produces both — download the `dsh-closure` artifact from a workflow run, or run
+the pack pipeline yourself; then run the two commands under [Build](#build); see
 [RELEASE.md](RELEASE.md)).
 
 Alternatively `export DEEPSEEK_API_KEY=sk-...` instead of `.env`. DSH forbids `DEEPSEEK_*`
@@ -49,9 +50,9 @@ Dockerfile               multi-stage (packed closure install → hardened runtim
 entrypoint.sh            first-boot preference seed + Landlock probe + exec dsh (DSH self-initializes the profile)
 compose.yml              default hardening (read_only / cap_drop / no-new-privileges / ports / volumes)
 overlay/webstartup.yml   composition overlay (0.0.0.0 bind — DSH rejects --host 0.0.0.0 — and ~/workspace pins)
-install/                 closure manifest (all family tarballs as file: deps; frozen package-lock.json, engines ^24)
+install/                 generated closure manifest + lock (gitignored; per-build products)
 dist/                    packed closure tarballs (CI job "pack" artifacts; gitignored, required for the build)
-scripts/                 gen-install-manifest.mjs — regenerates install/package.json for a new version
+scripts/                 gen-install-manifest.mjs — regenerates install/ for a version
 docs/                    design / security / usage
 RELEASE.md               release checklist (tag = version pin)
 ```
@@ -65,8 +66,9 @@ an explicit tag (`.github/workflows/docker-build.yml`, job "pack"); locally you 
 ```bash
 # 1. get the closure tarballs into dist/ (CI artifact "dsh-closure", or run the pack
 #    pipeline yourself — see RELEASE.md)
-# 2. regenerate the manifest for the version (once per release):
+# 2. generate install/ (manifest + frozen lock; node 24):
 node scripts/gen-install-manifest.mjs 0.1.2-alpha.1
+cd install && npm install --package-lock-only --no-audit --no-fund
 # 3. build (multi-arch publish is CI's job; docker compose build works too)
 docker build -t ghcr.io/hyooeewee/dshc:latest .
 docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/hyooeewee/dshc:latest --push .
@@ -78,9 +80,10 @@ upstream `verify-packed-install` semantics — pnpm cannot satisfy transitive `^
 ranges from `file:` tarballs), so builds are reproducible without private registry
 access. On throttled networks set `APT_MIRROR` / `NPM_REGISTRY` in `.env`.
 
-Releases are tag-driven: tag pushes make CI pack the upstream `dsh-v<version>` and
-install exactly those artifacts — the committed `install/` manifest needs no update
-for a tag build (it only tracks `latest` on main and local dev builds).
+Releases are tag-driven: a tag push makes CI pack the upstream `dsh-v<version>` and
+install exactly those artifacts, publishing `<version>` **and** `latest` (latest =
+newest release tag; main pushes rebuild `latest` from the newest tag). The `install/`
+manifest + lock are per-build products, never committed.
 
 ## License note
 
