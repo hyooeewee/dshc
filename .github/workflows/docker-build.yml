@@ -193,7 +193,10 @@ jobs:
             ghcr.io/hyooeewee/dshc
             godotttt/dshc
           tags: |
-            type=raw,value=latest,enable={{is_default_branch || is_tag}}
+            # two raw lines, mutually exclusive runs (branch vs tag push): the
+            # evaluator (v6.1.0) rejects boolean operators like `||`
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable={{is_tag}}
             type=semver,pattern={{raw}}
 
       - name: Build and push
