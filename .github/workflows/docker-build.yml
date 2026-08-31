@@ -214,6 +214,24 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # GHCR keeps untagged versions forever (they hold blobs and count against
+      # storage) — prune the orphans left by tag moves / latest re-stamps right
+      # after the push. GITHUB_TOKEN may lack delete:packages; degrade to a
+      # warning then (run scripts/clean-ghcr.sh manually).
+      - name: Prune untagged ghcr versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api --paginate -H "Accept: application/vnd.github+json" \
+            "/user/packages/container/dshc/versions" > /tmp/v.json || exit 0
+          for id in $(jq -r '.[] | select((.metadata.container.tags // []) | length == 0) | .id' /tmp/v.json); do
+            if out="$(gh api -X DELETE -H "Accept: application/vnd.github+json" "/user/packages/container/dshc/versions/$id" 2>&1)"; then
+              echo "pruned untagged version $id"
+            else
+              echo "::warning::cannot delete untagged $id ($out) — run scripts/clean-ghcr.sh"
+            fi
+          done
+
       # Docker Hub has no README auto-sync for plain pushes; publish the repo
       # overview from README.md (short description + full markdown overview).
       - name: Update Docker Hub description from README
