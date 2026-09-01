@@ -6,5 +6,6 @@
 *.zip
 
 bin/
-scripts/
+__pycache__/
 *.tar
+.tmp-*

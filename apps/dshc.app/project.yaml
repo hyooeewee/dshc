@@ -1,6 +1,6 @@
 spec_version: "2.1"
 app_id: com.dshc.app
-version: 0.1.1
+version: 0.1.2
 support_arch:
   - amd64
   - arm64
