@@ -168,6 +168,7 @@ jobs:
             ghcr.io/hyooeewee/dshc
             godotttt/dshc
           tags: |
+            type=raw,value=latest,enable={{is_not_default_branch}}
             type=semver,pattern={{version}}
 
       - name: Build and push
