@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Save the dshc Docker image into the dshc.app per-architecture rootfs.
+"""Save the dshc Docker image into the dshc.upk per-architecture rootfs.
 
 Pulls godotttt/dshc:<tag> (when missing locally or with --pull) and exports a
 per-platform tarball with `docker save --platform`, mirroring the layout that
@@ -28,12 +28,12 @@ PLATFORM_ALIASES = {
 
 DEFAULT_PLATFORMS = ["linux/amd64", "linux/arm64"]
 DEFAULT_REPO = "godotttt/dshc"
-APP_ROOT = Path(__file__).resolve().parent.parent  # scripts/.. = apps/dshc.app
+APP_ROOT = Path(__file__).resolve().parent.parent  # scripts/.. = apps/dshc.upk
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Export the dshc image as per-platform tarballs for the dshc.app rootfs.",
+        description="Export the dshc image as per-platform tarballs for the dshc.upk rootfs.",
     )
     parser.add_argument(
         "-t",

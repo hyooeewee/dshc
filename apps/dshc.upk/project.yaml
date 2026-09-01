@@ -1,0 +1,34 @@
+spec_version: "2.1"
+app_id: com.dshc.app
+version: 0.1.2
+support_arch:
+  - amd64
+  - arm64
+is_docker_app: true
+port: 23080
+open_type: tab
+tag_types:
+  - utility
+depend_fw_version: 1.13.0.0000
+depend_docker_version: 1.7.0.0000
+# parameters:
+#   - key: WORKSPACE
+#     type: path
+#     required: false
+#     i18n:
+#       en-US:
+#         name: workspace
+#         description: Workspace path for DSH Container
+i18n:
+  en-US:
+    name: DSH Container
+    description: "Run DSH (DeepSeek Harness) safely inside Docker: multi-arch (`linux/amd64` + `linux/arm64`), default-hardened, built from a self-contained, reproducible dependency closure."
+    author: hyooeewee
+    official: https://github.com/hyooeewee/dshc
+    help: https://github.com/hyooeewee/dshc/blob/main/README.md
+  zh-CN:
+    name: DSH 容器
+    description: "把 DSH（DeepSeek Harness） 安全地跑进 Docker：多架构（linux/amd64 + arm64）、默认硬化、基于自包含且可复现的依赖闭包构建。"
+    author: hyooeewee
+    official: https://github.com/hyooeewee/dshc
+    help: https://github.com/hyooeewee/dshc/blob/main/README.zh.md

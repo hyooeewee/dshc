@@ -2,12 +2,12 @@
 
 > 📖 English · [中文](README.zh.md)
 
-Run **DSH (DeepSeek Harness)** safely inside Docker: multi-arch (`linux/amd64` + `linux/arm64`),
-default-hardened, built from the upstream **GitHub tag source** — GitHub releases lead npm
-publish by design, so images track the tag: the closure is packed once at that tag and
-installed per architecture (map #12).
+Run DSH (DeepSeek Harness) safely inside Docker: multi-arch (`linux/amd64` + `linux/arm64`), default-hardened, built from a self-contained, reproducible dependency closure.
 
-Design decisions: [docs/design.md](docs/design.md) · Security boundaries: [docs/security.md](docs/security.md) · Runbook: [docs/usage.md](docs/usage.md) · Release flow: [RELEASE.md](RELEASE.md) · Wayfinder maps: [hyooeewee/dshc#1](https://github.com/hyooeewee/dshc/issues/1), [#12](https://github.com/hyooeewee/dshc/issues/12).
+- Design decisions: [docs/design.md](docs/design.md)
+- Security boundaries: [docs/security.md](docs/security.md)
+- Runbook: [docs/usage.md](docs/usage.md)
+- Release flow: [RELEASE.md](RELEASE.md)
 
 ## Quick start
 

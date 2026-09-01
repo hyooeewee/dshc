@@ -2,9 +2,12 @@
 
 > 📖 [English](README.md) · 中文
 
-把 **DSH（DeepSeek Harness）** 安全地跑进 Docker：多架构（linux/amd64 + arm64）、默认硬化、基于上游 **GitHub tag 源码**构建——GitHub 发布总是领先 npm，因此镜像以 tag 为准：在该 tag 上打包一次闭包、按架构安装（地图 #12）。
+把 DSH（DeepSeek Harness） 安全地跑进 Docker：多架构（linux/amd64 + arm64）、默认硬化、基于自包含且可复现的依赖闭包构建。
 
-设计决策：[docs/design.md](docs/design.md) · 安全边界：[docs/security.md](docs/security.md) · 运行手册：[docs/usage.md](docs/usage.md) · 发布流程：[RELEASE.md](RELEASE.md) · wayfinder 地图：[hyooeewee/dshc#1](https://github.com/hyooeewee/dshc/issues/1)、[#12](https://github.com/hyooeewee/dshc/issues/12)。
+- 设计决策：[docs/design.md](docs/design.md)
+- 安全边界：[docs/security.md](docs/security.md)
+- 运行手册：[docs/usage.md](docs/usage.md)
+- 发布流程：[RELEASE.md](RELEASE.md)
 
 ## 快速开始
 

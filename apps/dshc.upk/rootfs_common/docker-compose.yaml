@@ -1,8 +1,3 @@
-# dshc — hardened compose defaults
-# Quick start: put DEEPSEEK_API_KEY in .env (see .env.example), then
-#   docker compose up -d --build
-# GUI: http://127.0.0.1:${DSHC_PORT:-3080}
-
 services:
   dshc:
     image: godotttt/dshc:0.1.2-alpha.3
@@ -42,11 +37,11 @@ services:
     cpus: 2
 
     ports:
-      - "127.0.0.1:3080:3080"
+      - 3080:3080
 
     volumes:
       - dshc-data:/home/dsh/.dsh
-      - ${WORKSPACE}:/home/dsh/workspace
+      # - ${WORKSPACE}:/home/dsh/workspace
 
 volumes:
   dshc-data:

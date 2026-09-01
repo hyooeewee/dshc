@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Stamp the release version into the dshc.app bundle and pack it with `ug`.
+"""Stamp the release version into the dshc.upk bundle and pack it with `ug`.
 
 Updates the image tag in rootfs_common/docker-compose.yaml and the version in
 project.yaml to the given release tag (image tags are published without a "v"
 prefix); the project version keeps only the semver core (0.1.2-alpha.3 ->
 0.1.2) while the compose image ref stays verbatim. Then runs `ug check` and
-`ug pack --arch all --build <id>` through apps/dshc.app/bin/ug.
+`ug pack --arch all --build <id>` through apps/dshc.upk/bin/ug.
 
 Modes (at most one):
   default      stamp versions, `ug check`, `ug pack`  (needs --build, --tag)
@@ -26,7 +26,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-APP_DIR = Path(__file__).resolve().parent.parent  # scripts/.. = apps/dshc.app
+APP_DIR = Path(__file__).resolve().parent.parent  # scripts/.. = apps/dshc.upk
 UG = Path(os.environ.get("DSHC_UG", str(APP_DIR / "bin" / "ug")))
 
 COMPOSE_PATH = APP_DIR / "rootfs_common" / "docker-compose.yaml"
@@ -51,7 +51,7 @@ def semver_core(tag: str) -> str:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Stamp the release tag into the dshc.app bundle and pack it with ug.",
+        description="Stamp the release tag into the dshc.upk bundle and pack it with ug.",
     )
     parser.add_argument("--build", help="ug pack build id, e.g. 103")
     parser.add_argument(
