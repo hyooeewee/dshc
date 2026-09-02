@@ -31,6 +31,30 @@ else
   echo "[dshc] sandbox: launcher not found at $LANDLOCK"
 fi
 
+wslpath() {
+  node -e '
+    const p = process.argv[1];
+    // /mnt/c/... -> C:\...
+    if (/^\/mnt\/([a-z])\/(.*)$/.test(p)) {
+      const [, drive, rest] = p.match(/^\/mnt\/([a-z])\/(.*)$/);
+      console.log(drive.toUpperCase() + ":\\" + rest.replace(/\//g, "\\"));
+    }
+    // /home/... -> C:\home\... (WSL2 默认挂载点)
+    else if (/^\/home\/(.*)$/.test(p)) {
+      console.log("C:\\home\\" + p.slice(6).replace(/\//g, "\\"));
+    }
+    // /root/... -> C:\root\...
+    else if (/^\/root\/(.*)$/.test(p)) {
+      console.log("C:\\root\\" + p.slice(6).replace(/\//g, "\\"));
+    }
+    // 其他按 /mnt/c 默认
+    else {
+      console.log("C:\\" + p.slice(1).replace(/\//g, "\\"));
+    }
+  ' "$1"
+}
+export -f wslpath
+
 OVERLAY=/app/overlay/webstartup.yml
 [ -f "$OVERLAY" ] || { echo "[dshc] ERROR: overlay missing" >&2; exit 1; }
 echo "[dshc] applying overlay: bind 0.0.0.0:3080 via --patch $OVERLAY"
