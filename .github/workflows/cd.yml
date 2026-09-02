@@ -122,6 +122,12 @@ jobs:
           [ "$(ls dist/npm/*.tgz 2>/dev/null | wc -l)" -ge 1 ] \
             || { echo "::error::no closure tarballs under dist/npm"; exit 1; }
 
+      - name: Compute dist directory hash for cache invalidation
+        id: dist-hash
+        run: |
+          hash=$(find dist -type f -name "*.tgz" -exec sha256sum {} + | sha256sum | cut -d' ' -f1)
+          echo "dist_hash=$hash" >> "$GITHUB_OUTPUT"
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -187,6 +193,8 @@ jobs:
             dsh.upstream.version=${{ needs.pack.outputs.dsh_tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            DIST_HASH=${{ steps.dist-hash.outputs.dist_hash }}
 
       - name: Update Docker Hub description
         uses: peter-evans/dockerhub-description@v5

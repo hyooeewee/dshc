@@ -2,6 +2,7 @@
 # Multi-arch (amd64/arm64) hardened image for DSH.
 ARG APT_MIRROR=deb.debian.org
 ARG NPM_REGISTRY=https://registry.npmjs.org
+ARG DIST_HASH=unknown
 
 # ---- builder: resolve the packed closure ----
 FROM node:24-bookworm-slim AS builder
