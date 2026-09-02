@@ -47,12 +47,6 @@ jobs:
           git ls-remote "https://github.com/${{ env.UPSTREAM_REPO }}.git" "refs/tags/dsh-${DSH_TAG}" | grep -q . \
             || { echo "::error::upstream tag dsh-${DSH_TAG} not found"; exit 1; }
 
-      - name: Set up Node.js (corepack provides pnpm@11.7.0)
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
-
       - name: Checkout upstream at tag
         uses: actions/checkout@v7
         with:
@@ -61,6 +55,11 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
           path: upstream
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
 
       - name: Install (frozen workspace)
         working-directory: upstream
@@ -127,7 +126,6 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       - name: Regenerate closure manifest + lock from the artifacts
         run: |
