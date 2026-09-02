@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 env:
@@ -51,6 +51,7 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 24
+          cache: pnpm
 
       - name: Checkout upstream at tag
         uses: actions/checkout@v7
@@ -126,12 +127,17 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: 
+          cache: npm
 
       - name: Regenerate closure manifest + lock from the artifacts
         run: |
           node scripts/gen-install-manifest.mjs "${{ needs.pack.outputs.dsh_tag }}"
           cd install && npm install --package-lock-only --no-audit --no-fund
+
+      - name: Commit install/ manifest + lock
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          file_pattern: "install/*.json"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
