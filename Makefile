@@ -15,7 +15,7 @@
 # PLATFORM (save platforms, default linux/amd64,linux/arm64).
 
 PY := python3
-APP_DIR := apps/dshc.app
+APP_DIR := apps/dshc.upk
 SCRIPTS := $(APP_DIR)/scripts
 SAVE := $(SCRIPTS)/save-docker-images.py
 PACK := $(SCRIPTS)/pack-upk.py

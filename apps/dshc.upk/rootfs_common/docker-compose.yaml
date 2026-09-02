@@ -1,9 +1,8 @@
 services:
   dshc:
-    image: godotttt/dshc:0.1.2-alpha.3
-    container_name: dshc
-    hostname: dshc
-    restart: unless-stopped
+    image: godotttt/dshc:0.1.2-alpha.4
+    # container_name: dshc
+    restart: always
 
     # --- filesystem wall ---
     read_only: true
@@ -39,9 +38,12 @@ services:
     ports:
       - 3080:3080
 
+    environment:
+      - DSHC_TRUSTED_HOSTS=10.0.0.199:3080,localhost:3080,127.0.0.1:3080
+
     volumes:
       - dshc-data:/home/dsh/.dsh
-      # - ${WORKSPACE}:/home/dsh/workspace
+      - ${WORKSPACE}:/home/dsh/workspace
 
 volumes:
   dshc-data:

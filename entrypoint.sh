@@ -57,11 +57,19 @@ export -f wslpath
 
 OVERLAY=/app/overlay/webstartup.yml
 [ -f "$OVERLAY" ] || { echo "[dshc] ERROR: overlay missing" >&2; exit 1; }
+
+TRUSTED_HOSTS="${DSHC_TRUSTED_HOSTS:-}"
+TRUSTED_ARGS=""
+if [ -n "$TRUSTED_HOSTS" ]; then
+  for host in $(echo "$TRUSTED_HOSTS" | tr ',' ' '); do
+    TRUSTED_ARGS="$TRUSTED_ARGS --trusted-host $host"
+  done
+fi
+
 echo "[dshc] applying overlay: bind 0.0.0.0:3080 via --patch $OVERLAY"
 echo "[dshc] starting: node --expose-internals dsh bin.js --profile web --patch $OVERLAY"
 
 AUTH_FILE="/home/dsh/.dsh/.web-auth"
 
-exec node --expose-internals /app/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js \
-  --profile web --patch "$OVERLAY" "$@" 2>&1 \
-  | stdbuf -oL tee >(stdbuf -oL grep -oE 'token=[A-Za-z0-9_\-]+' | head -1 > "$AUTH_FILE")
+exec node --expose-internals /app/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js --profile web --patch "$OVERLAY" $TRUSTED_ARGS "$@" 2>&1 \
+ | stdbuf -oL tee >(stdbuf -oL grep -oE 'token=[A-Za-z0-9_\-]+' | head -1 > "$AUTH_FILE")
