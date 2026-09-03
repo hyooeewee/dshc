@@ -218,10 +218,8 @@ jobs:
             ghcr.io/hyooeewee/dshc
             godotttt/dshc
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
             type=semver,pattern={{version}}
-            type=ref,event=tag
-            type=raw,value={{needs.pack.outputs.dsh_tag}}
           version: ${{ needs.pack.outputs.dsh_tag }}
 
       - name: Build and push
@@ -233,7 +231,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: |
             ${{ steps.meta.outputs.labels }}
-            dsh.upstream.version=${{ needs.pack.outputs.dsh_tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
