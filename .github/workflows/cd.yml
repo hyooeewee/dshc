@@ -173,6 +173,8 @@ jobs:
           node scripts/gen-manifest.mjs "${{ needs.pack.outputs.dsh_tag }}"
 
       - name: Generate pnpm-lock.yaml from manifest
+        env:
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE: "0"
         run: |
           pnpm install --lockfile-only
 
