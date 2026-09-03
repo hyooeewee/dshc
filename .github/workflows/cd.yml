@@ -63,14 +63,34 @@ jobs:
           persist-credentials: false
           path: upstream
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          run_install: false
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: 24
 
+      - name: Get pnpm store directory
+        id: pnpm-store
+        working-directory: upstream
+        run: |
+          echo "dir=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('upstream/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
       - name: Install (frozen workspace)
         working-directory: upstream
-        run: corepack enable && pnpm install --frozen-lockfile --ignore-scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build official profile
         working-directory: upstream
@@ -134,6 +154,12 @@ jobs:
           hash=$(find dist -type f -name "*.tgz" -exec sha256sum {} + | sha256sum | cut -d' ' -f1)
           echo "dist_hash=$hash" >> "$GITHUB_OUTPUT"
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          run_install: false
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -145,8 +171,7 @@ jobs:
 
       - name: Generate pnpm-lock.yaml from manifest
         run: |
-          corepack enable
-          pnpm install --lockfile-only --no-audit --no-fund
+          pnpm install --lockfile-only
 
       - name: Commit install/ manifest
         uses: stefanzweifel/git-auto-commit-action@v7
