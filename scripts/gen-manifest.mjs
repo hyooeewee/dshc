@@ -35,7 +35,7 @@ const dependencies = {};
 for (const subdir of ["npm", "npm-vendor", "npm-landlock"]) {
   for (const file of scan(subdir)) {
     const name = tarName(join(dist, subdir, file));
-    dependencies[name] = `file:../dist/${subdir}/${file}`;
+    dependencies[name] = `file:./dist/${subdir}/${file}`;
   }
 }
 dependencies["react"] = "^18.2.0";
