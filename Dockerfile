@@ -21,7 +21,7 @@ COPY pnpm-lock.yaml ./
 COPY dist/ ./dist/
 
 RUN corepack enable \
-  && pnpm install --omit=dev --no-audit --no-fund --frozen-lockfile \
+  && pnpm install --prod --ignore-scripts --update-checksums \
   && pnpm store prune
 
 # ---- runtime: minimal hardened image ----
