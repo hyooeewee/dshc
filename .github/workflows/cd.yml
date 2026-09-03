@@ -129,6 +129,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
 
       - name: Download closure tarballs
         uses: actions/download-artifact@v8
