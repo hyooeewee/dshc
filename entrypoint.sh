@@ -16,44 +16,64 @@ fi
 
 # Sandbox readiness check
 case "$(uname -m)" in
-  x86_64) L_ARCH="x64" ;;
-  aarch64|arm64) L_ARCH="arm64" ;;
-  *) L_ARCH="x64" ;;
+  x86_64) L_PLATFORM="linux-x64" ;;
+  aarch64|arm64) L_PLATFORM="linux-arm64" ;;
+  *) L_PLATFORM="linux-x64" ;;
 esac
-LANDLOCK="/app/dsh/node_modules/@deepseek-ai/node-addon-landlock-run-linux-$L_ARCH/bin/landlock-run"
-if [ -x "$LANDLOCK" ]; then
+
+# Try to find landlock-run via the package's launcherPath logic
+LANDLOCK_PKG="/app/dsh/node_modules/@deepseek-ai/node-addon-landlock-run"
+LANDLOCK=""
+if [ -d "$LANDLOCK_PKG" ]; then
+  # Use node to resolve the platform package path (same logic as landlock package)
+  LANDLOCK=$(node -e "
+    const { createRequire } = require('node:module');
+    const { dirname, join } = require('node:path');
+    const { fileURLToPath } = require('node:url');
+    const require = createRequire(import.meta.url);
+    try {
+      const platformPackage = '@deepseek-ai/node-addon-landlock-run-${L_PLATFORM}';
+      const pkgPath = require.resolve(platformPackage + '/package.json');
+      console.log(join(dirname(pkgPath), 'bin', 'landlock-run'));
+    } catch {
+      console.log(fileURLToPath(new URL('../node_modules/@deepseek-ai/node-addon-landlock-run-'${L_PLATFORM}'/bin/landlock-run', import.meta.url)));
+    }
+  " 2>/dev/null)
+fi
+
+if [ -n "$LANDLOCK" ] && [ -x "$LANDLOCK" ]; then
   if "$LANDLOCK" --probe >/dev/null 2>&1; then
     echo "[dshc] sandbox: Landlock available (fallback chain bwrap->landlock)"
   else
     echo "[dshc] sandbox: landlock probe failed — check host kernel (CONFIG_SECURITY_LANDLOCK) / seccomp"
   fi
 else
-  echo "[dshc] sandbox: launcher not found at $LANDLOCK"
+  echo "[dshc] sandbox: landlock launcher not found — skipping probe (optional dependency)"
 fi
 
-wslpath() {
-  node -e '
-    const p = process.argv[1];
-    // /mnt/c/... -> C:\...
-    if (/^\/mnt\/([a-z])\/(.*)$/.test(p)) {
-      const [, drive, rest] = p.match(/^\/mnt\/([a-z])\/(.*)$/);
-      console.log(drive.toUpperCase() + ":\\" + rest.replace(/\//g, "\\"));
-    }
-    // /home/... -> C:\home\... (WSL2 默认挂载点)
-    else if (/^\/home\/(.*)$/.test(p)) {
-      console.log("C:\\home\\" + p.slice(6).replace(/\//g, "\\"));
-    }
-    // /root/... -> C:\root\...
-    else if (/^\/root\/(.*)$/.test(p)) {
-      console.log("C:\\root\\" + p.slice(6).replace(/\//g, "\\"));
-    }
-    // 其他按 /mnt/c 默认
-    else {
-      console.log("C:\\" + p.slice(1).replace(/\//g, "\\"));
-    }
-  ' "$1"
+# Install wslpath as executable in PATH (for Node.js spawn)
+cat > /usr/local/bin/wslpath <<'EOF'
+#!/usr/bin/env node
+const p = process.argv[2] || "";
+// /mnt/c/... -> C:\...
+if (/^\/mnt\/([a-z])\/(.*)$/.test(p)) {
+  const [, drive, rest] = p.match(/^\/mnt\/([a-z])\/(.*)$/);
+  console.log(drive.toUpperCase() + ":\\" + rest.replace(/\//g, "\\"));
 }
-export -f wslpath
+// /home/... -> C:\home\... (WSL2 default mount point)
+else if (/^\/home\/(.*)$/.test(p)) {
+  console.log("C:\\home\\" + p.slice(6).replace(/\//g, "\\"));
+}
+// /root/... -> C:\root\...
+else if (/^\/root\/(.*)$/.test(p)) {
+  console.log("C:\\root\\" + p.slice(6).replace(/\//g, "\\"));
+}
+// default: treat as /mnt/c
+else {
+  console.log("C:\\" + p.slice(1).replace(/\//g, "\\"));
+}
+EOF
+chmod +x /usr/local/bin/wslpath
 
 OVERLAY=/app/overlay/webstartup.yml
 [ -f "$OVERLAY" ] || { echo "[dshc] ERROR: overlay missing" >&2; exit 1; }
