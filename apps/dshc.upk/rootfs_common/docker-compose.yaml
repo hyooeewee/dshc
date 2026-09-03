@@ -1,3 +1,4 @@
+name: dshc
 services:
   dshc:
     image: godotttt/dshc:0.1.2-alpha.4
