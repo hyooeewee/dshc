@@ -21,6 +21,7 @@ COPY pnpm-lock.yaml ./
 COPY dist/ ./dist/
 
 RUN corepack enable \
+  && pnpm clean --lockfile \
   && pnpm install --prod --ignore-scripts --update-checksums \
   && pnpm store prune
 
