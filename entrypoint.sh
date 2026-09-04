@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Ensure .dsh directory is writable (volume may be owned by root)
+mkdir -p /home/dsh/.dsh
+chown -R dsh:dsh /home/dsh/.dsh 2>/dev/null || true
+
 # First-boot preference seed
 SETTINGS=/home/dsh/.dsh/settings.yaml
 if [ ! -f "$SETTINGS" ]; then

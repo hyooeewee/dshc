@@ -219,7 +219,7 @@ jobs:
             godotttt/dshc
           tags: |
             type=raw,value=latest
-            type=semver,value={{needs.pack.outputs.dsh_tag}},pattern={{version}}
+            type=semver,value=${{ needs.pack.outputs.dsh_tag }},pattern={{version}}
 
       - name: Build and push
         uses: docker/build-push-action@v7
