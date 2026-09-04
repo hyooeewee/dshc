@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Ensure .dsh directory is writable (volume may be owned by root)
 mkdir -p /home/dsh/.dsh
-chown -R dsh:dsh /home/dsh/.dsh 2>/dev/null || true
+chown -R dsh:dsh /home/dsh/.dsh
 
 # First-boot preference seed
 SETTINGS=/home/dsh/.dsh/settings.yaml
@@ -16,28 +16,24 @@ if [ ! -f "$SETTINGS" ]; then
   case "${DSHC_THEME:-}" in
     light|dark|system) printf 'ui-theme:\n  preference: %s\n' "$DSHC_THEME" >> "$SETTINGS" ;;
   esac
+  chown dsh:dsh "$SETTINGS"
 fi
 
 # Sandbox readiness check — use main package's launcherPath logic (handles missing optional deps)
-LANDLOCK=$(node -e "
-  const { createRequire } = require('node:module');
-  const { dirname, join } = require('node:path');
-  const { fileURLToPath } = require('node:url');
-  const require = createRequire(import.meta.url);
-  try {
-    // Resolve main package, then use its launcherPath logic
-    const mainPkg = require.resolve('@deepseek-ai/node-addon-landlock-run/package.json');
-    const mainDir = dirname(mainPkg);
-    // Dynamically import the launcherPath function from the main package
-    const { launcherPath } = require(mainDir + '/lib/index.js');
-    console.log(launcherPath());
-  } catch (e) {
-    console.log(''); // Not found
-  }
-" 2>/dev/null)
+cat > /tmp/landlock-check.cjs <<'EOF'
+try {
+  const mainPkg = require.resolve('/app/dsh/node_modules/@deepseek-ai/node-addon-landlock-run/package.json');
+  const mainDir = require('path').dirname(mainPkg);
+  const { launcherPath } = require(mainDir + '/lib/index.js');
+  console.log(launcherPath());
+} catch (e) {
+  console.log(''); // Not found
+}
+EOF
+LANDLOCK=$(runuser -u dsh -- node --input-type=commonjs /tmp/landlock-check.cjs 2>/dev/null)
 
 if [ -n "$LANDLOCK" ] && [ -x "$LANDLOCK" ]; then
-  if "$LANDLOCK" --probe >/dev/null 2>&1; then
+  if runuser -u dsh -- "$LANDLOCK" --probe >/dev/null 2>&1; then
     echo "[dshc] sandbox: Landlock available"
   else
     echo "[dshc] sandbox: landlock probe failed (kernel/seccomp)"
@@ -46,24 +42,26 @@ else
   echo "[dshc] sandbox: landlock not available (optional dependency)"
 fi
 
-# Install wslpath to user-writable location
-mkdir -p "$HOME/.local/bin"
-cat > "$HOME/.local/bin/wslpath" <<'EOF'
-#!/usr/bin/env node
-const p = process.argv[2] || "";
-if (/^\/mnt\/([a-z])\/(.*)$/.test(p)) {
-  const [, drive, rest] = p.match(/^\/mnt\/([a-z])\/(.*)$/);
-  console.log(drive.toUpperCase() + ":\\" + rest.replace(/\//g, "\\"));
-} else if (/^\/home\/(.*)$/.test(p)) {
-  console.log("C:\\home\\" + p.slice(6).replace(/\//g, "\\"));
-} else if (/^\/root\/(.*)$/.test(p)) {
-  console.log("C:\\root\\" + p.slice(6).replace(/\//g, "\\"));
+# Install wslpath to user-writable location (as dsh user)
+runuser -u dsh -- mkdir -p /home/dsh/.local/bin
+runuser -u dsh -- node --input-type=commonjs -e "
+const fs = require('fs');
+const path = require('path');
+const wslpathScript = \`#!/usr/bin/env node
+const p = process.argv[2] || \"\";
+if (/^\\/mnt\\/([a-z])\\/(.*)$/.test(p)) {
+  const [, drive, rest] = p.match(/^\\/mnt\\/([a-z])\\/(.*)$/);
+  console.log(drive.toUpperCase() + \":\\\\\" + rest.replace(/\\//g, \"\\\\\"));
+} else if (/^\\/home\\/(.*)$/.test(p)) {
+  console.log(\"C:\\\\home\\\\\" + p.slice(6).replace(/\\//g, \"\\\\\"));
+} else if (/^\\/root\\/(.*)$/.test(p)) {
+  console.log(\"C:\\\\root\\\\\" + p.slice(6).replace(/\\//g, \"\\\\\"));
 } else {
-  console.log("C:\\" + p.slice(1).replace(/\//g, "\\"));
-}
-EOF
-chmod +x "$HOME/.local/bin/wslpath"
-export PATH="$HOME/.local/bin:$PATH"
+  console.log(\"C:\\\\\" + p.slice(1).replace(/\\//g, \"\\\\\"));
+}\`;
+fs.writeFileSync('/home/dsh/.local/bin/wslpath', wslpathScript);
+fs.chmodSync('/home/dsh/.local/bin/wslpath', 0o755);
+"
 
 OVERLAY=/app/overlay/webstartup.yml
 [ -f "$OVERLAY" ] || { echo "[dshc] ERROR: overlay missing" >&2; exit 1; }
@@ -81,5 +79,6 @@ echo "[dshc] starting: node --expose-internals dsh bin.js --profile web --patch 
 
 AUTH_FILE="/home/dsh/.dsh/.web-auth"
 
-exec node --expose-internals /app/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js --profile web --patch "$OVERLAY" $TRUSTED_ARGS "$@" 2>&1 \
+# Run the main process as dsh user
+exec runuser -u dsh -- node --expose-internals /app/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js --profile web --patch "$OVERLAY" $TRUSTED_ARGS "$@" 2>&1 \
   | stdbuf -oL tee >(stdbuf -oL grep -oE 'token=[A-Za-z0-9_\-]+' | head -1 > "$AUTH_FILE")
