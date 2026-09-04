@@ -1,12 +1,14 @@
-# 设计文档（dshc）
+# Design notes (dshc)
 
-决策由 wayfinder 地图 [hyooeewee/dshc#1](https://github.com/hyooeewee/dshc/issues/1) 的三个设计工单（#2/#3/#4）拧成，此处为落地摘要。
-Source-build 迁移（地图 [#12](https://github.com/hyooeewee/dshc/issues/12)、工单 #13–#16）改写了本文的 Build input 与 发布 两节：镜像从"registry 依赖闭包"改为"上游 GitHub tag 源码打包出的闭包"。
+English | [中文](design.zh.md)
 
-## 边界条件（已锁定）
+Decisions are forged from the three design tickets (#2/#3/#4) behind wayfinder map [hyooeewee/dshc#1](https://github.com/hyooeewee/dshc/issues/1); this is the landing summary.
+The source-build migration (map [#12](https://github.com/hyooeewee/dshc/issues/12), tickets #13–#16) rewrote this file's Build input and Release sections: the image moved from a "registry dependency closure" to "a closure packed from the upstream GitHub tag source".
 
-1. **平台**：Linux，`node:22-bookworm-slim`，amd64 + arm64 多架构（buildx）。DSH 在非 win32 用 bash 模式，无需 pwsh；glibc → 勿用 alpine。
-2. **DSH payload（map #12 起）**: a *packed closure built from the upstream
+## Locked boundary conditions
+
+1. **Platform**: Linux, `node:22-bookworm-slim`, amd64 + arm64 multi-arch (buildx). DSH uses bash mode on non-win32, so pwsh is not needed; glibc → do not use alpine.
+2. **DSH payload (from map #12)**: a *packed closure built from the upstream
    source*, not a registry install. CI job "pack" replicates the upstream
    release pipeline at an explicit GitHub tag (`build:official` → `release:pack`;
    pure-JS platform-neutral tarballs, verified in prototype #15); the image
@@ -17,31 +19,31 @@ Source-build 迁移（地图 [#12](https://github.com/hyooeewee/dshc/issues/12)�
    - The manifest is self-consistent: `engines.node ^24` matches the runtime
      base image; `dshUpstreamVersion` carries the pinned upstream version
      (main-branch builds read it — the dshc git tag is the version pin).
-   - **镜像不预装任何外挂包**（#11）：DSH 内置 web profile 模板从安装本体闭包即可解析；外挂插件运行时经 DSH 原生机制装入状态卷。
+   - **The image pre-installs no out-of-tree plugins** (#11): DSH's built-in web profile template resolves from the installed closure alone; out-of-tree plugins load into the state volume at runtime via DSH's native mechanism.
    - Toolchain (installer stage): node-pty has no prebuild → node-gyp compiles
      it; koffi rebuilds from source on the node 24 ABI → **cmake required**
      (prototype #15); landlock launcher + platform packages ship prebuilt.
-3. **沙箱**（#2 结论）：默认 seccomp 下 **Landlock 可用、零额外权限**（三个 landlock syscall 无条件放行，launcher 用 no_new_privs）；bwrap 需特权级放行。DSH 自动回退 bwrap→landlock，不 fail-closed。compose 保留默认 seccomp、不去加特权。**镜像默认不内置 bwrap**（默认硬化完全走 Landlock；走 bwrap 属高级，需自行安装 + seccomp=unconfined）。入口就绪自检跑 `landlock-run --probe`。
-4. **用户模型**：单用户单实例，无内置认证。
-5. **网络**：出站全开（LLM API / web_search / SSH / cloudflared 按需）；入站仅 3080。容器内绑 0.0.0.0 由入口 `--patch overlay/webstartup.yml` 显式放行（DSH CLI 有意拒绝 `--host 0.0.0.0`）；宿主侧 compose 只映射 `127.0.0.1:3080:3080`。
-6. **持久化**：无状态镜像 + 状态卷挂在上游默认的 harness home（`~/.dsh` = `/home/dsh/.dsh`，卷只覆盖该子路径；其下含 `profiles/`、`sessions/`、`settings.yaml`、`.credentials.yaml`、`storages/`、`skills/`、`dsh-ssh.json`）。`$HOME` 保持镜像默认 `/home/dsh`——不设 `HOME`/`DSH_HOME` 覆盖，容器内 AI 按官方文档即可定位全部配置；agents/skill 共享根同样循上游默认 `~/.agents`。**profile 无需预置**（#11）：DSH 首次启动自动初始化内置 web profile（manifest + 用户补丁层 + pnpm workspace）并从 `/app/dsh/node_modules` 治愈模块回退符号链接闭包；外挂插件运行时经 `dsh plugin add` 装入 profile 目录（持久、需网络），pnpm store 经 `npm_config_store_dir` 指到状态卷（rootfs 只读）。遥测经 compose 注入 `DSH_TELEMETRY_DISABLED=1` 关闭（上游默认开）。
-7. **加固**（默认硬化）：非 root（uid 10001 `dsh`）、`cap_drop: ALL` + 常规默认 cap 集合、`no-new-privileges`、保留默认 seccomp、`read_only: true` + `/tmp` tmpfs + 卷/绑定两个可写点（`~/.dsh`、`~/workspace`）、资源限制（pids/mem/cpu）、tini PID1、HEALTHCHECK 探 3080、STOPSIGNAL SIGTERM（DSH 自带 5s 优雅退出）。
+3. **Sandbox** (#2 conclusion): under the default seccomp **Landlock works with zero extra privileges** (the three landlock syscalls are unconditionally allowed, launcher uses no_new_privs); bwrap needs a privileged allowance. DSH falls back bwrap→landlock automatically, not fail-closed. compose keeps the default seccomp and adds no privileges. **The image does not bundle bwrap by default** (default hardening goes entirely through Landlock; using bwrap is advanced: self-install + `seccomp=unconfined`). The entrypoint readiness check runs `landlock-run --probe`.
+4. **User model**: single user, single instance, no built-in auth.
+5. **Network**: egress fully open (LLM API / web_search / SSH / cloudflared on demand); inbound only 3080. Binding 0.0.0.0 inside the container is explicitly allowed by the entrypoint `--patch overlay/webstartup.yml` (the DSH CLI deliberately rejects `--host 0.0.0.0`); the host-side compose maps only `127.0.0.1:3080:3080`.
+6. **Persistence**: stateless image + a state volume mounted at the upstream-default harness home (`~/.dsh` = `/home/dsh/.dsh`, the volume covers only that subpath; beneath it are `profiles/`, `sessions/`, `settings.yaml`, `.credentials.yaml`, `storages/`, `skills/`, `dsh-ssh.json`). `$HOME` stays the image default `/home/dsh` — no `HOME`/`DSH_HOME` override, so the in-container AI locates every config via the official docs; the agents/skill shared root likewise follows the upstream default `~/.agents`. **No profile is pre-seeded** (#11): DSH initializes the built-in web profile (manifest + user patch layer + pnpm workspace) on first start and heals the module fallback symlink closure from `/app/dsh/node_modules`; out-of-tree plugins load into the profile directory at runtime via `dsh plugin add` (persistent, needs network), and the pnpm store points to the state volume via `npm_config_store_dir` (rootfs read-only). Telemetry is disabled via compose-injected `DSH_TELEMETRY_DISABLED=1` (upstream default on).
+7. **Hardening** (default hardened): non-root (uid 10001 `dsh`), `cap_drop: ALL` + the regular default cap set, `no-new-privileges`, default seccomp kept, `read_only: true` + `/tmp` tmpfs + two writable points as volume/bind (`~/.dsh`, `~/workspace`), resource limits (pids/mem/cpu), tini as PID1, HEALTHCHECK probing 3080, STOPSIGNAL SIGTERM (DSH's own 5s graceful shutdown).
 
-## 启动命令（已核实）
+## Startup command (verified)
 
-DSH CLI 规范形为 **`dsh --profile web`**；`dsh web` 是其硬编码等价别名（`@deepseek-ai/dsh/lib/bin.js`）。**容器入口用 `node --expose-internals .../dsh/lib/bin.js --profile web --patch /app/overlay/webstartup.yml`** —— DSH 的 cordis-loader/HMR 需要 `--expose-internals`（NODE_OPTIONS 禁止该 flag，只能作为 execArgv；缺失时 HMR loader entry 报错）。另有 `--dump-config`（排障）、`--trusted-host`（远端 /api trust fence）。
+The DSH CLI canonical form is **`dsh --profile web`**; `dsh web` is its hardcoded equivalent alias (`@deepseek-ai/dsh/lib/bin.js`). **The container entrypoint uses `node --expose-internals .../dsh/lib/bin.js --profile web --patch /app/overlay/webstartup.yml`** — DSH's cordis-loader/HMR needs `--expose-internals` (NODE_OPTIONS forbids that flag, so it can only be an execArgv; when absent the HMR loader entry errors). Also available: `--dump-config` (troubleshooting), `--trusted-host` (remote /api trust fence).
 
-## 镜像内布局
+## In-image layout
 
-| 路径 | 性质 | 说明 |
+| Path | Nature | Notes |
 |---|---|---|
-| `/app` | 只读 | 代码 + `dsh/node_modules`（安装本体闭包）+ `overlay/` |
-| `/home/dsh` | `$HOME` | 真实用户主目录；`.dsh` 与 `workspace` 两个子路径分别挂卷/绑宿主 |
-| `/home/dsh/.dsh` | 状态卷 | harness home（上游默认 `~/.dsh`）；`profiles/web` 由 DSH 首启自建 |
-| `/home/dsh/workspace` | 宿主绑定挂载（默认 `./workspace`）或卷内目录 | **会话工作区**：overlay 将 `sandbox-policy.workspaceRoot` 与 `fs-sandbox.cwd` 钉在此处（基线默认 `process.cwd()`）。置于 `$HOME` 之下是因为目录选择器等工作界面硬编码从 `homedir()` 起浏览 |
-| `/tmp` | tmpfs | DSH spill/临时文件（0700 私有） |
+| `/app` | read-only | code + `dsh/node_modules` (installed closure) + `overlay/` |
+| `/home/dsh` | `$HOME` | real user home; the `.dsh` and `workspace` subpaths mount the volume/bind separately |
+| `/home/dsh/.dsh` | state volume | harness home (upstream default `~/.dsh`); `profiles/web` is created by DSH on first start |
+| `/home/dsh/workspace` | host bind mount (default `./workspace`) or in-volume directory | **session workspace**: overlay pins `sandbox-policy.workspaceRoot` and `fs-sandbox.cwd` here (baseline default `process.cwd()`). Placed under `$HOME` because work surfaces like the directory picker hardcode browsing from `homedir()` |
+| `/tmp` | tmpfs | DSH spill/temp files (0700 private) |
 
-## 发布（map #12 起）
+## Release (from map #12)
 
 - Target `ghcr.io/hyooeewee/dshc` (private package).
 - Dual-job GitHub Actions pipeline (map #12 / ticket #16): job "pack" replicates
@@ -53,8 +55,8 @@ DSH CLI 规范形为 **`dsh --profile web`**；`dsh web` 是其硬编码等价�
   `<version>` + `latest` (newest release tag). `install/` (closure manifest +
   frozen lock) is a per-build product regenerated from each run's artifacts and
   is never committed. Full steps: `RELEASE.md`.
-- 冒烟（#9）：GUI 可达、bash 工具在 Landlock 沙箱内、容器内 danger-full-access 不穿透宿主、重启卷持久、`dsh --profile headless` 可用。
+- Smoke test (#9): GUI reachable, bash tools inside the Landlock sandbox, in-container danger-full-access does not reach the host, volume persists across restarts, `dsh --profile headless` works.
 
-## 范围之外（不实现）
+## Out of scope (not implemented)
 
-多用户/多租户 · 内置认证 · 公开分发/许可核查 · egress 白名单 · Windows 容器 · k8s 编排 · DSH 本体功能（属上游）。
+Multi-user/multi-tenant · built-in auth · public distribution/license audit · egress allowlist · Windows containers · k8s orchestration · DSH core features (upstream).

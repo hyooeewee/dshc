@@ -5,3 +5,6 @@
 Dockerfile text eol=lf
 *.md text eol=lf
 *.json text eol=lf
+# Bilingual pairing records are generated from the three confirmed owner-blob pairs.
+# Register the driver with: pnpm run install:merge-driver
+*.i18n.yaml merge=dsh-translation-pairing

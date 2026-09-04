@@ -1,88 +1,90 @@
-# 运行手册（dshc）
+# Runbook (dshc)
 
-## 环境变量（容器运行时）
+English | [中文](usage.zh.md)
 
-| 变量 | 说明 |
+## Environment variables (container runtime)
+
+| Variable | Notes |
 |---|---|
-| `DEEPSEEK_API_KEY` | LLM 凭证（bootstrap 变量，只能经 env 注入） |
-| `DEEPSEEK_BASE_URL` | 可选，自定义 LLM 端点（默认 `https://api.deepseek.com`） |
-| `DSH_PERMISSION_MODE` | `workspace-write`(默认) / `danger-full-access`（仅容器内） |
-| `DSHC_LOCALE` / `DSHC_THEME` | 首启偏好种子：GUI 语言（`zh`/`en`）与外观（`light`/`dark`/`system`）。entrypoint 仅在 `settings.yaml` 尚不存在时写入；之后界面上的修改落盘该文件，重启永不覆盖 |
+| `DEEPSEEK_API_KEY` | LLM credential (bootstrap variable; env injection only) |
+| `DEEPSEEK_BASE_URL` | optional, custom LLM endpoint (default `https://api.deepseek.com`) |
+| `DSH_PERMISSION_MODE` | `workspace-write` (default) / `danger-full-access` (container only) |
+| `DSHC_LOCALE` / `DSHC_THEME` | first-boot preference seed: GUI language (`zh`/`en`) and appearance (`light`/`dark`/`system`). The entrypoint writes only when `settings.yaml` does not yet exist; later GUI edits persist to that file and restarts never overwrite it |
 
-> 遥测：compose 固定注入 `DSH_TELEMETRY_DISABLED=1`（上游默认开；该变量是单向开关，任何非空值都关闭）。想开遥测需删除 compose.yml 里那一行。
+> Telemetry: compose injects `DSH_TELEMETRY_DISABLED=1` fixed (upstream default on; the variable is a one-way switch, any non-empty value disables). To enable telemetry, delete that line in compose.yml.
 >
-> 工作目录：会话工作区经 overlay 钉在 `/home/dsh/workspace`（即宿主 `./workspace`，位于 `$HOME` 之下——目录选择器等工作界面硬编码从 `homedir()` 起浏览，工作区必须住在家里才能被看到）。基线组合默认用 `process.cwd()`，overlay 覆盖了 `sandbox-policy.workspaceRoot` 与 `fs-sandbox.cwd`；想调整编辑 `overlay/webstartup.yml`。
+> Working directory: the session workspace is pinned via overlay to `/home/dsh/workspace` (i.e. host `./workspace`, under `$HOME` — work surfaces like the directory picker hardcode browsing from `homedir()`, so the workspace must live inside the home to be visible). The baseline composition defaults to `process.cwd()`; overlay overrides `sandbox-policy.workspaceRoot` and `fs-sandbox.cwd`; to adjust, edit `overlay/webstartup.yml`.
 
-## 密钥注入
+## Key injection
 
 ```bash
-# 宿主的 .env（已被 .gitignore 排除），compose 自动透传给容器
+# host-side .env (gitignored); compose passes it to the container automatically
 cat >> .env <<'EOF'
 DEEPSEEK_API_KEY=sk-...
 EOF
 docker compose up -d --build
 ```
 
-DSH 会把 `DEEPSEEK_API_KEY` 当默认凭证使用；也可改在状态卷预置 `.credentials.yaml`（DSH 原生凭证机制）。
+DSH uses `DEEPSEEK_API_KEY` as the default credential; alternatively pre-seed `.credentials.yaml` in the state volume (DSH's native credentials mechanism).
 
-## .env 参数（构建与运行）
+## .env parameters (build and run)
 
-项目根目录的 `.env`（已 gitignore，模板见 [.env.example](../.env.example)）由 compose 自动读取，无需再传 `--build-arg`：
+The project-root `.env` (gitignored; template in [.env.example](../.env.example)) is read automatically by compose, so no `--build-arg` is needed:
 
-| 变量 | 默认 | 说明 |
+| Variable | Default | Notes |
 |---|---|---|
-| `APT_MIRROR` / `NPM_REGISTRY` | 上游官方源 | 慢网络时切国内镜像（**构建期**生效） |
-| `DSHC_PORT` | `3080` | 宿主侧 GUI 端口（始终只绑本机回环；dshc 无内置认证，见 [security](security.md)） |
-| `DSH_PERMISSION_MODE` | `workspace-write` | 容器内 agent 权限模式 |
+| `APT_MIRROR` / `NPM_REGISTRY` | upstream official sources | switch to domestic mirrors on slow networks (**build-time** effect) |
+| `DSHC_PORT` | `3080` | host-side GUI port (always bound to loopback only; dshc has no built-in auth, see [security](security.md)) |
+| `DSH_PERMISSION_MODE` | `workspace-write` | in-container agent permission mode |
 
-构建参数改动后需重新 `docker compose build`；运行参数 `docker compose up -d` 重启即生效。
+After changing build parameters rerun `docker compose build`; runtime parameters take effect on `docker compose up -d` restart.
 
-## 插件：运行时安装
+## Plugins: runtime install
 
-镜像只含官方 in-box 闭包。装外挂插件走 DSH 原生机制（pnpm 装进状态卷的 profile 目录，持久、需网络）：
+The image ships only the official in-box closure. Install out-of-tree plugins via DSH's native mechanism (pnpm into the state volume's profile directory; persistent, needs network):
 
 ```bash
 docker compose exec dshc dsh plugin --profile web add <package>
 ```
 
-> 注意：本方案已无「模板复制」与 `DSH_ALLOW_PLUGIN_INSTALL` 开关（#11 决议移除）；profile 由 DSH 首次启动自动初始化。
+> Note: this scheme no longer has "template copy" nor a `DSH_ALLOW_PLUGIN_INSTALL` switch (removed by #11); the profile is auto-initialized by DSH on first start.
 
-## 升级 DSH（重建镜像）
+## Upgrading DSH (rebuild the image)
 
-版本钉子的位置：
+Where the version pins live:
 
-| 钉什么 | 在哪 | 谁来校验 |
+| What is pinned | Where | Who verifies |
 |---|---|---|
-| DSH 版本 | dshc git tag（tag = 版本钉点）；main 构建从最新 release tag 解析 | CI job "pack" 的上游 tag 守卫 + verify 冒烟 gate |
-| 闭包 | 每次构建现场生成 `install/package.json` 的 `file:` tarball 依赖 + `package-lock.json` | `npm ci` 冻结安装 |
-| Node 大版本 | 生成器写 `install/package.json` 的 `engines.node` + Dockerfile 顶部 `NODE_VERSION` | 安装时不匹配即警告；FROM 标签无法读 manifest，两者需同步改 |
+| DSH version | dshc git tag (tag = version pin); main builds resolve from the newest release tag | CI job "pack" upstream-tag guard + verify smoke gate |
+| Closure | `file:` tarball deps in the per-build `install/package.json` + `package-lock.json` | frozen `npm ci` install |
+| Node major | `engines.node` written by the generator into `install/package.json` + `NODE_VERSION` at the top of the Dockerfile | warning on mismatch at install; the FROM tag cannot read the manifest, so the two must change together |
 
-升级 = 按 [RELEASE.md](RELEASE.md)：`git tag <新版本> && git push origin <新版本>`（CI 打包 → 现场生成清单+锁 → 双架构发布 `<新版本>` + `latest`）。本地构建才需要：`dist/` 闭包在场 → `node scripts/gen-install-manifest.mjs <版本>` → node 24 内 `cd install && npm install --package-lock-only --no-audit --no-fund` → `docker compose build` → 重起。
+Upgrading = follow [RELEASE.md](RELEASE.md): `git tag <new version> && git push origin <new version>` (CI packs → generates manifest+lock on the spot → multi-arch release `<new version>` + `latest`). A local build needs: `dist/` closure present → `node scripts/gen-install-manifest.mjs <version>` → inside node 24 `cd install && npm install --package-lock-only --no-audit --no-fund` → `docker compose build` → restart.
 
-> 从旧版升级到本版：请先 `docker compose down -v` 重置状态卷。两类旧卷都会失效（预期行为）：template/ 三件套时代的卷列着已移除的社区包，新镜像会因解析失败拒绝启动；官方闭包初版（`DSH_HOME=/data`）的卷，数据在 `/data/profiles/` 等顶层路径，而本版 harness home 回归上游默认 `~/.dsh` = `/data/.dsh`——旧数据不会被读到，DSH 会当作全新状态重新初始化。
+> Upgrading from an older version: run `docker compose down -v` first to reset the state volume. Both legacy volume kinds are expected to fail: volumes from the template/ three-file era list removed community packages and the new image refuses to start on parse failure; volumes from the first official-closure build (`DSH_HOME=/data`) keep data at top-level paths like `/data/profiles/`, whereas this version's harness home returns to the upstream default `~/.dsh` = `/data/.dsh` — the old data is not read, and DSH re-initializes as a fresh state.
 
-## 远程访问
+## Remote access
 
-默认 `localhost:3080` 仅本机。远程三种选择：
-- **SSH 隧道**（推荐，零新增服务）：`ssh -L 3080:127.0.0.1:3080 user@host`，再访问本地 `http://127.0.0.1:3080`。
-- **cloudflared 快速隧道**：需先安装提供该能力的外挂插件（见「插件」章节）。
-- **反向代理**：Nginx/Caddy + TLS（+ basic auth），并给 DSH 加 `--trusted-host`。
+By default `localhost:3080` is local-only. Three remote options:
+- **SSH tunnel** (recommended, zero added services): `ssh -L 3080:127.0.0.1:3080 user@host`, then visit local `http://127.0.0.1:3080`.
+- **cloudflared quick tunnel**: first install an out-of-tree plugin that provides it (see the Plugins section).
+- **Reverse proxy**: Nginx/Caddy + TLS (+ basic auth), and pass `--trusted-host` to DSH.
 
-## 排障
+## Troubleshooting
 
-- `docker compose logs -f dshc` — 看启动日志与 `[dshc] sandbox:` 自检行。
-- `docker compose exec dshc dsh --profile web --dump-config` — dump 构成树；确认 `webserver.config.host=0.0.0.0` 已应用。
-- 沙箱不可用：确认宿主内核 `CONFIG_SECURITY_LANDLOCK=y` 且 `CONFIG_LSM` 含 `landlock`；或需 bwrap 时用 `--security-opt seccomp=unconfined`+非特权 userns，并自行在容器内安装 bwrap（镜像默认未内置，高级）。
-- 端口没通：确认 `docker compose ps` 里 `127.0.0.1:3080->3080` 已列出；别把容器内绑定误当作覆盖层未生效。
-- 状态没持久：`docker compose down` 不删卷；`docker compose down -v` 才会删 `/data`。
+- `docker compose logs -f dshc` — watch startup logs and the `[dshc] sandbox:` self-check lines.
+- `docker compose exec dshc dsh --profile web --dump-config` — dump the composition tree; confirm `webserver.config.host=0.0.0.0` applied.
+- Sandbox unavailable: confirm the host kernel has `CONFIG_SECURITY_LANDLOCK=y` and `CONFIG_LSM` includes `landlock`; or, when bwrap is needed, use `--security-opt seccomp=unconfined` + an unprivileged userns and install bwrap inside the container yourself (not bundled by default; advanced).
+- Port not open: confirm `docker compose ps` lists `127.0.0.1:3080->3080`; do not mistake the in-container bind for the overlay not having applied.
+- State not persisting: `docker compose down` does not delete volumes; only `docker compose down -v` deletes `/data`.
 
-## headless 一次性模式（CI 友好）
+## Headless one-shot mode (CI-friendly)
 
-镜像 entrypoint 默认引导 **web** profile（并带 0.0.0.0 覆盖层），所以跑 headless 需**覆写 entrypoint** 才能进入 headless 引导。DSH 要求 `node --expose-internals`（cordis loader/HMR 使用；NODE_OPTIONS 禁止该 flag，只能作为 execArgv），所以直接调 bin.js：
+The image entrypoint boots the **web** profile by default (with the 0.0.0.0 overlay), so running headless requires **overriding the entrypoint** to reach the headless boot. DSH requires `node --expose-internals` (used by the cordis loader/HMR; NODE_OPTIONS forbids that flag, so it can only be an execArgv), so call bin.js directly:
 
 ```bash
 docker compose run --rm --entrypoint "node --expose-internals" dshc \
-  /app/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js --profile headless "你的任务"
+  /app/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js --profile headless "your task"
 ```
 
-无监听端口、跑完退出——方便脚本化/CI。
+No listening port, exits when done — convenient for scripting/CI.

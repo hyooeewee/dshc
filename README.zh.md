@@ -1,12 +1,12 @@
 # dshc — DeepSeek Harness Container
 
-> 📖 [English](README.md) · 中文
+[English](README.md) | 中文
 
 把 DSH（DeepSeek Harness） 安全地跑进 Docker：多架构（linux/amd64 + arm64）、默认硬化、基于自包含且可复现的依赖闭包构建。
 
-- 设计决策：[docs/design.md](docs/design.md)
-- 安全边界：[docs/security.md](docs/security.md)
-- 运行手册：[docs/usage.md](docs/usage.md)
+- 设计决策：[docs/design.zh.md](docs/design.zh.md)
+- 安全边界：[docs/security.zh.md](docs/security.zh.md)
+- 运行手册：[docs/usage.zh.md](docs/usage.zh.md)
 - 发布流程：[RELEASE.md](RELEASE.md)
 
 ## 快速开始
@@ -23,17 +23,17 @@ open http://127.0.0.1:3080               # host port via DSHC_PORT in .env (defa
 
 | 项 | 决策 | 文档 |
 |---|---|---|
-| 平台 | Linux amd64 + arm64 多架构，bookworm-slim 基础镜像 | [design](docs/design.md) |
+| 平台 | Linux amd64 + arm64 多架构，bookworm-slim 基础镜像 | [design](docs/design.zh.md) |
 | 版本来源 | 上游 GitHub tag 源码构建（如 `0.1.2-alpha.1`）；dshc 的 git tag 即版本钉点——npm 风格命名、不带 `v` 前缀 | [release](RELEASE.md) |
-| 数据 | 无状态镜像；状态卷挂在上游默认 `~/.dsh`（即 `/home/dsh/.dsh`）；代码只读 | [design](docs/design.md) |
-| 工作区 | 默认隔离在 `~/workspace`，不碰宿主；显式挂载=有意穿透边界 | [security](docs/security.md) |
-| 会话 | 默认 `workspace-write` + GUI 审批；`danger-full-access` 只影响容器内 | [security](docs/security.md) |
-| 沙箱 | Linux Landlock（默认 seccomp 可用，零额外权限）；bwrap 未内置（高级可自装） | [security](docs/security.md) |
-| 网络 | 出站全开；入站仅 GUI 端口（`DSHC_PORT`，宿主只绑 localhost）；无内置认证 | [security](docs/security.md) |
-| 密钥 | `DEEPSEEK_API_KEY` 经环境变量/`.env` 注入；绝不落在容器侧文件 | [usage](docs/usage.md) |
-| 插件 | 镜像只装官方闭包；外挂插件运行时经 `dsh plugin add` 安装（装入状态卷，需网络） | [usage](docs/usage.md) |
-| 偏好 | `DSHC_LOCALE` / `DSHC_THEME` 首启种子语言与外观；之后 GUI 的修改落盘且永不覆盖 | [usage](docs/usage.md) |
-| 远程访问 | `DSHC_TRUSTED_HOSTS`（逗号分隔）允许非 localhost 访问，通过 `--trusted-host` 传给 DSH | [usage](docs/usage.md) |
+| 数据 | 无状态镜像；状态卷挂在上游默认 `~/.dsh`（即 `/home/dsh/.dsh`）；代码只读 | [design](docs/design.zh.md) |
+| 工作区 | 默认隔离在 `~/workspace`，不碰宿主；显式挂载=有意穿透边界 | [security](docs/security.zh.md) |
+| 会话 | 默认 `workspace-write` + GUI 审批；`danger-full-access` 只影响容器内 | [security](docs/security.zh.md) |
+| 沙箱 | Linux Landlock（默认 seccomp 可用，零额外权限）；bwrap 未内置（高级可自装） | [security](docs/security.zh.md) |
+| 网络 | 出站全开；入站仅 GUI 端口（`DSHC_PORT`，宿主只绑 localhost）；无内置认证 | [security](docs/security.zh.md) |
+| 密钥 | `DEEPSEEK_API_KEY` 经环境变量/`.env` 注入；绝不落在容器侧文件 | [usage](docs/usage.zh.md) |
+| 插件 | 镜像只装官方闭包；外挂插件运行时经 `dsh plugin add` 安装（装入状态卷，需网络） | [usage](docs/usage.zh.md) |
+| 偏好 | `DSHC_LOCALE` / `DSHC_THEME` 首启种子语言与外观；之后 GUI 的修改落盘且永不覆盖 | [usage](docs/usage.zh.md) |
+| 远程访问 | `DSHC_TRUSTED_HOSTS`（逗号分隔）允许非 localhost 访问，通过 `--trusted-host` 传给 DSH | [usage](docs/usage.zh.md) |
 
 所有旋钮集中在 `.env`（模板见 [.env.example](.env.example)）——构建期镜像源（`APT_MIRROR`、`NPM_REGISTRY`）与运行时设置同文件管理。
 
@@ -44,11 +44,11 @@ Dockerfile               multi-stage (packed closure install → hardened runtim
 entrypoint.sh            first-boot preference seed + Landlock probe + wslpath + token capture + trusted-hosts + exec dsh
 compose.yml              default hardening (read_only / cap_drop / no-new-privileges / ports / volumes)
 overlay/webstartup.yml   composition overlay (0.0.0.0 bind — DSH rejects --host 0.0.0.0 — and ~/workspace pins)
-install/                 生成的闭包清单 + 锁（gitignored；每次构建的产物）
-dist/                    打包闭包 tarball（CI job "pack" 产物；gitignored，构建必需）
-scripts/gen-manifest.mjs 为某版本生成 install/ (package.json + pnpm-lock.yaml)
+install/                 generated closure manifest + lock (gitignored; per-build products)
+dist/                    packed closure tarballs (CI job "pack" artifacts; gitignored, required for the build)
+scripts/gen-manifest.mjs regenerates install/ (package.json + pnpm-lock.yaml) for a version
 docs/                    design / security / usage
-RELEASE.md               发布 checklist（tag 即版本钉点）
+RELEASE.md               release checklist (tag = version pin)
 ```
 
 ## 工作原理
@@ -79,13 +79,13 @@ RELEASE.md               发布 checklist（tag 即版本钉点）
 Dockerfile 直接消费 `dist/` 下的打包闭包——**不**从 npm registry 拉 DSH。
 
 ```dockerfile
-# builder 阶段
+# builder stage
 COPY package.json pnpm-lock.yaml dist/ ./
 RUN corepack enable \
   && pnpm install --prod --frozen-lockfile --ignore-scripts --update-checksums \
   && pnpm store prune
 
-# runtime 阶段
+# runtime stage
 COPY --from=builder /buildspace/node_modules ./dsh/node_modules
 ```
 
@@ -112,11 +112,11 @@ COPY --from=builder /buildspace/node_modules ./dsh/node_modules
 需要 `dist/` 下的闭包 tarball（下载 CI artifact `dsh-closure` 或自行跑打包管线）：
 
 ```bash
-# 1. 把闭包 tarball 放进 dist/（CI artifact "dsh-closure"，或自行跑打包管线——见 RELEASE.md）
-# 2. 生成 install/（清单 + 冻结锁；node 24）：
+# 1. get closure tarballs into dist/ (CI artifact "dsh-closure", or run pack pipeline)
+# 2. generate install/ (manifest + frozen lock; node 24):
 node scripts/gen-manifest.mjs 0.1.2-alpha.1
 pnpm install --lockfile-only
-# 3. 构建（多架构发布交给 CI；docker compose build 同样可行）
+# 3. build (multi-arch publish is CI's job; docker compose build works too)
 docker build -t ghcr.io/hyooeewee/dshc:latest .
 docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/hyooeewee/dshc:latest --push .
 ```

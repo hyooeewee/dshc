@@ -1,0 +1,7 @@
+{
+  "excluded": [
+    "docs/agents/",
+    "docs/i18n/",
+    "docs/research/"
+  ]
+}
