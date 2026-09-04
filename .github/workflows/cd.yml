@@ -212,15 +212,14 @@ jobs:
 
       - name: Docker metadata
         id: meta
-        uses: docker/metadata-action@v6.1.0
+        uses: docker/metadata-action@v6
         with:
           images: |
             ghcr.io/hyooeewee/dshc
             godotttt/dshc
           tags: |
             type=raw,value=latest
-            type=semver,pattern={{version}}
-          version: ${{ needs.pack.outputs.dsh_tag }}
+            type=semver,value={{needs.pack.outputs.dsh_tag}},pattern={{version}}
 
       - name: Build and push
         uses: docker/build-push-action@v7
