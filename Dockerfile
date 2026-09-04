@@ -49,7 +49,7 @@ VOLUME ["/home/dsh/.dsh"]
 WORKDIR /home/dsh/workspace
 USER dsh
 
-ENV PATH="/app/dsh/node_modules/.bin:$PATH" \
+ENV PATH="/home/dsh/.local/bin:/app/dsh/node_modules/.bin:$PATH" \
     PNPM_HOME="/home/dsh/.dsh/pnpm" \
     PNPM_STORE_PATH="/home/dsh/.dsh/pnpm-store"
 

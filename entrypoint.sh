@@ -14,66 +14,52 @@ if [ ! -f "$SETTINGS" ]; then
   esac
 fi
 
-# Sandbox readiness check
-case "$(uname -m)" in
-  x86_64) L_PLATFORM="linux-x64" ;;
-  aarch64|arm64) L_PLATFORM="linux-arm64" ;;
-  *) L_PLATFORM="linux-x64" ;;
-esac
-
-# Try to find landlock-run via the package's launcherPath logic
-LANDLOCK_PKG="/app/dsh/node_modules/@deepseek-ai/node-addon-landlock-run"
-LANDLOCK=""
-if [ -d "$LANDLOCK_PKG" ]; then
-  # Use node to resolve the platform package path (same logic as landlock package)
-  LANDLOCK=$(node -e "
-    const { createRequire } = require('node:module');
-    const { dirname, join } = require('node:path');
-    const { fileURLToPath } = require('node:url');
-    const require = createRequire(import.meta.url);
-    try {
-      const platformPackage = '@deepseek-ai/node-addon-landlock-run-${L_PLATFORM}';
-      const pkgPath = require.resolve(platformPackage + '/package.json');
-      console.log(join(dirname(pkgPath), 'bin', 'landlock-run'));
-    } catch {
-      console.log(fileURLToPath(new URL('../node_modules/@deepseek-ai/node-addon-landlock-run-'${L_PLATFORM}'/bin/landlock-run', import.meta.url)));
-    }
-  " 2>/dev/null)
-fi
+# Sandbox readiness check — use main package's launcherPath logic (handles missing optional deps)
+LANDLOCK=$(node -e "
+  const { createRequire } = require('node:module');
+  const { dirname, join } = require('node:path');
+  const { fileURLToPath } = require('node:url');
+  const require = createRequire(import.meta.url);
+  try {
+    // Resolve main package, then use its launcherPath logic
+    const mainPkg = require.resolve('@deepseek-ai/node-addon-landlock-run/package.json');
+    const mainDir = dirname(mainPkg);
+    // Dynamically import the launcherPath function from the main package
+    const { launcherPath } = require(mainDir + '/lib/index.js');
+    console.log(launcherPath());
+  } catch (e) {
+    console.log(''); // Not found
+  }
+" 2>/dev/null)
 
 if [ -n "$LANDLOCK" ] && [ -x "$LANDLOCK" ]; then
   if "$LANDLOCK" --probe >/dev/null 2>&1; then
-    echo "[dshc] sandbox: Landlock available (fallback chain bwrap->landlock)"
+    echo "[dshc] sandbox: Landlock available"
   else
-    echo "[dshc] sandbox: landlock probe failed — check host kernel (CONFIG_SECURITY_LANDLOCK) / seccomp"
+    echo "[dshc] sandbox: landlock probe failed (kernel/seccomp)"
   fi
 else
-  echo "[dshc] sandbox: landlock launcher not found — skipping probe (optional dependency)"
+  echo "[dshc] sandbox: landlock not available (optional dependency)"
 fi
 
-# Install wslpath as executable in PATH (for Node.js spawn)
-cat > /usr/local/bin/wslpath <<'EOF'
+# Install wslpath to user-writable location
+mkdir -p "$HOME/.local/bin"
+cat > "$HOME/.local/bin/wslpath" <<'EOF'
 #!/usr/bin/env node
 const p = process.argv[2] || "";
-// /mnt/c/... -> C:\...
 if (/^\/mnt\/([a-z])\/(.*)$/.test(p)) {
   const [, drive, rest] = p.match(/^\/mnt\/([a-z])\/(.*)$/);
   console.log(drive.toUpperCase() + ":\\" + rest.replace(/\//g, "\\"));
-}
-// /home/... -> C:\home\... (WSL2 default mount point)
-else if (/^\/home\/(.*)$/.test(p)) {
+} else if (/^\/home\/(.*)$/.test(p)) {
   console.log("C:\\home\\" + p.slice(6).replace(/\//g, "\\"));
-}
-// /root/... -> C:\root\...
-else if (/^\/root\/(.*)$/.test(p)) {
+} else if (/^\/root\/(.*)$/.test(p)) {
   console.log("C:\\root\\" + p.slice(6).replace(/\//g, "\\"));
-}
-// default: treat as /mnt/c
-else {
+} else {
   console.log("C:\\" + p.slice(1).replace(/\//g, "\\"));
 }
 EOF
-chmod +x /usr/local/bin/wslpath
+chmod +x "$HOME/.local/bin/wslpath"
+export PATH="$HOME/.local/bin:$PATH"
 
 OVERLAY=/app/overlay/webstartup.yml
 [ -f "$OVERLAY" ] || { echo "[dshc] ERROR: overlay missing" >&2; exit 1; }
@@ -92,4 +78,4 @@ echo "[dshc] starting: node --expose-internals dsh bin.js --profile web --patch 
 AUTH_FILE="/home/dsh/.dsh/.web-auth"
 
 exec node --expose-internals /app/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js --profile web --patch "$OVERLAY" $TRUSTED_ARGS "$@" 2>&1 \
- | stdbuf -oL tee >(stdbuf -oL grep -oE 'token=[A-Za-z0-9_\-]+' | head -1 > "$AUTH_FILE")
+  | stdbuf -oL tee >(stdbuf -oL grep -oE 'token=[A-Za-z0-9_\-]+' | head -1 > "$AUTH_FILE")
