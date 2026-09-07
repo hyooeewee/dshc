@@ -46,10 +46,9 @@ jobs:
           fi
           [ -n "$tag" ] || { echo "::error::no release tag yet — create one (git tag <version> && git push origin <version>)"; exit 1; }
           echo "dshc_tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "DSH_TAG=dsh-$tag" >> "$GITHUB_ENV"
 
       - name: Verify upstream tag exists
-        env:
-          DSH_TAG: dsh-${{ steps.resolve.outputs.dshc_tag }}
         run: |
           git ls-remote "https://github.com/${{ env.UPSTREAM_REPO }}.git" "refs/tags/${DSH_TAG}" | grep -q . \
             || { echo "::error::upstream tag ${DSH_TAG} not found"; exit 1; }
@@ -58,7 +57,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: ${{ env.UPSTREAM_REPO }}
-          ref: refs/tags/${DSH_TAG}
+          ref: refs/tags/${{ env.DSH_TAG }}
           fetch-depth: 1
           persist-credentials: false
           path: upstream
@@ -101,7 +100,8 @@ jobs:
         run: |
           pnpm run release:pack --family dsh --out dist/npm --concurrency 4
           pnpm run release:pack --family vendor --out dist/npm-vendor --concurrency 4
-          pnpm --dir native/landlock-run run release:pack -- "$PWD/dist/npm-landlock"
+          pnpm --dir native/landlock-run run build:ts
+          pnpm --dir native/landlock-run/packages/entry pack --pack-destination "$PWD/dist/npm-landlock"
 
       - name: Verify packed install (smoke gate)
         working-directory: upstream
@@ -230,7 +230,7 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             DIST_HASH=${{ steps.dist-hash.outputs.dist_hash }}
-            DSH_TAG=$DSH_TAG
+            DSH_TAG=dsh-${{ needs.pack.outputs.dshc_tag }}
 
       - name: Update Docker Hub description
         uses: peter-evans/dockerhub-description@v5
