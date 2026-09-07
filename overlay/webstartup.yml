@@ -11,3 +11,25 @@
   config:
     host: 0.0.0.0
     port: 3080
+
+- id: dshc-brand
+  type: plugin
+  entry: |
+    import type { Context } from 'cordis'
+    import { slots } from '@deepseek-ai/dsh-client-ui-sidebar/client'
+    import { createElement } from 'react'
+
+    export const inject = ['slots']
+
+    export function apply(ctx: Context) {
+      const version = process.env.DSHC_BASE_VERSION
+      if (!version) return
+
+      ctx.slots.inject('sidebar.brand.name', () =>
+        ctx.slots.register({ name: 'sidebar.brand.name' }, () =>
+          createElement('span', {
+            style: { fontSize: 12, opacity: 0.7, fontWeight: 500 }
+          }, `Based on ${version}`)
+        )
+      )
+    }

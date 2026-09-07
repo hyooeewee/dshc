@@ -3,6 +3,7 @@
 ARG APT_MIRROR=deb.debian.org
 ARG NPM_REGISTRY=https://registry.npmjs.org
 ARG DIST_HASH=unknown
+ARG DSH_TAG=unknown
 
 # ---- builder: resolve the packed closure ----
 FROM node:24-bookworm-slim AS builder
@@ -28,7 +29,9 @@ RUN corepack enable \
 # ---- runtime: minimal hardened image ----
 FROM node:24-bookworm-slim AS runtime
 ARG APT_MIRROR
-ENV DEBIAN_FRONTEND=noninteractive
+ARG DSH_TAG
+ENV DEBIAN_FRONTEND=noninteractive \
+    DSHC_BASE_VERSION=${DSH_TAG#dsh-v}
 
 RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked --mount=type=cache,target=/var/cache/apt,sharing=locked \
   for f in /etc/apt/sources.list /etc/apt/sources.list.d/*; do [ -f "$f" ] && sed -i "s|deb.debian.org|$APT_MIRROR|g" "$f"; done \
@@ -41,19 +44,22 @@ RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked --mount=type=cac
 WORKDIR /app
 COPY --from=builder /buildspace/node_modules ./dsh/node_modules
 COPY overlay/ ./overlay/
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-RUN mkdir -p /home/dsh/.dsh /home/dsh/workspace && chown dsh:dsh /home/dsh/.dsh /home/dsh/workspace
-WORKDIR /home/dsh/workspace
+RUN mkdir -p /home/dsh/.dsh /home/dsh/workspace && \
+    chown -R dsh:dsh /home/dsh/.dsh /home/dsh/workspace
 
 ENV PATH="/home/dsh/.local/bin:/app/dsh/node_modules/.bin:$PATH" \
     PNPM_HOME="/home/dsh/.dsh/pnpm" \
     PNPM_STORE_PATH="/home/dsh/.dsh/pnpm-store"
 
-EXPOSE 3080
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3080/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-ENTRYPOINT ["tini", "-g", "--", "/usr/local/bin/entrypoint.sh"]
+EXPOSE 3080
+VOLUME ["/home/dsh/.dsh", "/home/dsh/workspace"]
+WORKDIR /home/dsh/workspace
+
+ENTRYPOINT ["tini", "-g", "--", "/entrypoint.sh"]

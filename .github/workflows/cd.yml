@@ -5,8 +5,8 @@ on:
     tags: ["*"]
   workflow_dispatch:
     inputs:
-      target_tag:
-        description: Target tag to build(v0.1.2-alpha.5)
+      target_dshc_tag:
+        description: Target tag to build(v0.1.3-rc.1). If not specified, the latest tag will be used.
         required: false
         type: string
 
@@ -25,7 +25,7 @@ jobs:
   pack:
     runs-on: ubuntu-latest
     outputs:
-      dsh_tag: ${{ steps.resolve.outputs.dsh_tag }}
+      dshc_tag: ${{ steps.resolve.outputs.dshc_tag }}
     steps:
       - name: Checkout dshc
         if: github.ref_type != 'tag'
@@ -40,25 +40,25 @@ jobs:
             tag="${{ github.ref_name }}"
             echo "::info::use pushed tag: ${{ github.ref_name }}"
           else
-            tag="${{ inputs.target_tag }}"
+            tag="${{ inputs.target_dshc_tag }}"
             tag=${tag:-$(git tag --list --sort=-v:refname | head -1)}
             echo "::info::use target tag: $tag"
           fi
           [ -n "$tag" ] || { echo "::error::no release tag yet — create one (git tag <version> && git push origin <version>)"; exit 1; }
-          echo "dsh_tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "dshc_tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Verify upstream tag exists
         env:
-          DSH_TAG: ${{ steps.resolve.outputs.dsh_tag }}
+          DSH_TAG: dsh-${{ steps.resolve.outputs.dshc_tag }}
         run: |
-          git ls-remote "https://github.com/${{ env.UPSTREAM_REPO }}.git" "refs/tags/dsh-${DSH_TAG}" | grep -q . \
-            || { echo "::error::upstream tag dsh-${DSH_TAG} not found"; exit 1; }
+          git ls-remote "https://github.com/${{ env.UPSTREAM_REPO }}.git" "refs/tags/${DSH_TAG}" | grep -q . \
+            || { echo "::error::upstream tag ${DSH_TAG} not found"; exit 1; }
 
       - name: Checkout upstream at tag
         uses: actions/checkout@v7
         with:
           repository: ${{ env.UPSTREAM_REPO }}
-          ref: refs/tags/dsh-${{ steps.resolve.outputs.dsh_tag }}
+          ref: refs/tags/${DSH_TAG}
           fetch-depth: 1
           persist-credentials: false
           path: upstream
@@ -90,22 +90,18 @@ jobs:
 
       - name: Install (frozen workspace)
         working-directory: upstream
-        run: pnpm install --frozen-lockfile --ignore-scripts
+        run: pnpm install --frozen-lockfile
 
       - name: Build official profile
         working-directory: upstream
         run: pnpm run build:official
 
-      - name: Pack closure (dsh family)
-        working-directory: upstream
-        run: pnpm run release:pack --family dsh --out dist/npm
-
-      - name: Pack closure (vendored framework + landlock entry)
+      - name: Pack closure (dsh + vendored + landlock)
         working-directory: upstream
         run: |
-          pnpm run release:pack --family vendor --out dist/npm-vendor
-          pnpm --dir native/landlock-run run build:ts
-          pnpm --dir native/landlock-run/packages/entry pack --pack-destination "$PWD/dist/npm-landlock"
+          pnpm run release:pack --family dsh --out dist/npm --concurrency 4
+          pnpm run release:pack --family vendor --out dist/npm-vendor --concurrency 4
+          pnpm --dir native/landlock-run run release:pack -- "$PWD/dist/npm-landlock"
 
       - name: Verify packed install (smoke gate)
         working-directory: upstream
@@ -170,7 +166,7 @@ jobs:
 
       - name: Regenerate closure manifest from artifacts
         run: |
-          node scripts/gen-manifest.mjs "${{ needs.pack.outputs.dsh_tag }}"
+          node scripts/gen-manifest.mjs "${{ needs.pack.outputs.dshc_tag }}"
 
       - name: Generate pnpm-lock.yaml from manifest
         env:
@@ -219,7 +215,7 @@ jobs:
             godotttt/dshc
           tags: |
             type=raw,value=latest
-            type=semver,value=${{ needs.pack.outputs.dsh_tag }},pattern={{version}}
+            type=semver,value=${{ needs.pack.outputs.dshc_tag }},pattern={{version}}
 
       - name: Build and push
         uses: docker/build-push-action@v7
@@ -234,6 +230,7 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             DIST_HASH=${{ steps.dist-hash.outputs.dist_hash }}
+            DSH_TAG=$DSH_TAG
 
       - name: Update Docker Hub description
         uses: peter-evans/dockerhub-description@v5
