@@ -95,13 +95,18 @@ jobs:
         working-directory: upstream
         run: pnpm run build:official
 
+      - name: Install musl toolchain
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq musl-tools
+
       - name: Pack closure (dsh + vendored + landlock)
         working-directory: upstream
         run: |
           pnpm run release:pack --family dsh --out dist/npm --concurrency 4
           pnpm run release:pack --family vendor --out dist/npm-vendor --concurrency 4
-          pnpm --dir native/landlock-run run build:ts
-          pnpm --dir native/landlock-run/packages/entry pack --pack-destination "$PWD/dist/npm-landlock"
+          pnpm --dir native/system run build:native
+          pnpm --dir native/system run release:pack -- "$PWD/dist/npm-landlock" --current-platform-only
 
       - name: Verify packed install (smoke gate)
         working-directory: upstream
