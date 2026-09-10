@@ -36,7 +36,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked --mount=type=cache,target=/var/cache/apt,sharing=locked \
   for f in /etc/apt/sources.list /etc/apt/sources.list.d/*; do [ -f "$f" ] && sed -i "s|deb.debian.org|$APT_MIRROR|g" "$f"; done \
   && apt-get update \
-  && apt-get install -y --no-install-recommends tini ca-certificates \
+  && apt-get install -y --no-install-recommends tini ca-certificates util-linux \
   && useradd --create-home --uid 10001 dsh \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
@@ -50,7 +50,7 @@ RUN chmod +x /entrypoint.sh
 RUN mkdir -p /home/dsh/.dsh /home/dsh/workspace && \
     chown -R dsh:dsh /home/dsh/.dsh /home/dsh/workspace
 
-ENV PATH="/home/dsh/.local/bin:/app/dsh/node_modules/.bin:$PATH" \
+ENV PATH="/app/dsh/node_modules/.bin:$PATH" \
     PNPM_HOME="/home/dsh/.dsh/pnpm" \
     PNPM_STORE_PATH="/home/dsh/.dsh/pnpm-store"
 

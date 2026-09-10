@@ -5,7 +5,7 @@
 
 services:
   dshc:
-    image: godotttt/dshc:latest
+    image: godotttt/dshc:${DSHC_VERSION:-latest}
     container_name: dshc
     hostname: dshc
     restart: unless-stopped
@@ -52,23 +52,22 @@ services:
     cpus: 2
 
     ports:
-      - "127.0.0.1:${DSHC_PORT:-3080}:3080"
+      - "${DSHC_PORT:-3080}:3080"
 
     volumes:
-      - dshc-data:/home/dsh/.dsh
-      - ./workspace:/home/dsh/workspace
+      - ./data/dshc_data:/home/dsh/.dsh
+      - ./data/workspace:/home/dsh/workspace
 
     environment:
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-}
-      DSH_PERMISSION_MODE: ${DSH_PERMISSION_MODE:-workspace-write}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-}
+      - DSH_PERMISSION_MODE=${DSH_PERMISSION_MODE:-workspace-write}
       # First-boot seeds: entrypoint writes them into settings.yaml only while
       # that file does not exist; later GUI edits always win.
-      DSHC_LOCALE: ${DSHC_LOCALE:-}
-      DSHC_THEME: ${DSHC_THEME:-}
+      - DSHC_LOCALE=${DSHC_LOCALE:-}
+      - DSHC_THEME=${DSHC_THEME:-}
       # Privacy posture: upstream ships telemetry ON; any non-empty value
       # disables it (one-way switch — even "0"). Delete this line to enable.
-      DSH_TELEMETRY_DISABLED: "1"
-
-volumes:
-  dshc-data:
+      - DSH_TELEMETRY_DISABLED="1"
