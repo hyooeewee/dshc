@@ -6,9 +6,9 @@ services:
     restart: always
 
     # --- filesystem wall ---
-    read_only: true
-    tmpfs:
-      - /tmp
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
 
     # --- privilege wall ---
     security_opt:
@@ -43,7 +43,7 @@ services:
       - DSHC_TRUSTED_HOSTS=10.0.0.199:3080,localhost:3080,127.0.0.1:3080
 
     volumes:
-      - dshc-data:/home/dsh/.dsh
+      - ${DSHC_DATA}:/home/dsh/.dsh
       - ${WORKSPACE}:/home/dsh/workspace
 
 volumes:

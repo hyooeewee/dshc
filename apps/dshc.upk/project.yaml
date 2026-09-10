@@ -12,6 +12,13 @@ tag_types:
 depend_fw_version: 1.13.0.0000
 depend_docker_version: 1.7.0.0000
 parameters:
+  - key: DSHC_DATA
+    type: path
+    required: false
+    i18n:
+      en-US:
+        name: data
+        description: Data path for DSH Container
   - key: WORKSPACE
     type: path
     required: false
