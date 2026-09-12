@@ -235,7 +235,6 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             DIST_HASH=${{ steps.dist-hash.outputs.dist_hash }}
-            DSH_TAG=dsh-${{ needs.pack.outputs.dshc_tag }}
 
       - name: Update Docker Hub description
         uses: peter-evans/dockerhub-description@v5

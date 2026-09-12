@@ -3,7 +3,6 @@
 ARG APT_MIRROR=deb.debian.org
 ARG NPM_REGISTRY=https://registry.npmjs.org
 ARG DIST_HASH=unknown
-ARG DSH_TAG=unknown
 
 # ---- builder: resolve the packed closure ----
 FROM node:24-bookworm-slim AS builder
@@ -29,9 +28,7 @@ RUN corepack enable \
 # ---- runtime: minimal hardened image ----
 FROM node:24-bookworm-slim AS runtime
 ARG APT_MIRROR
-ARG DSH_TAG
-ENV DEBIAN_FRONTEND=noninteractive \
-    DSHC_BASE_VERSION=${DSH_TAG#dsh-v}
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked --mount=type=cache,target=/var/cache/apt,sharing=locked \
   for f in /etc/apt/sources.list /etc/apt/sources.list.d/*; do [ -f "$f" ] && sed -i "s|deb.debian.org|$APT_MIRROR|g" "$f"; done \
